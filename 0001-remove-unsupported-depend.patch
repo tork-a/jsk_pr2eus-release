@@ -1,0 +1,53 @@
+From a379460bcca76f203bbc49612b8556bf848735be Mon Sep 17 00:00:00 2001
+From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
+Date: Thu, 1 May 2014 02:30:54 +0900
+Subject: [PATCH] remove unsupported depend
+
+---
+ package.xml |   20 ++++++++++----------
+ 1 file changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/package.xml b/package.xml
+index 4ef0374..6094759 100644
+--- a/package.xml
++++ b/package.xml
+@@ -13,26 +13,26 @@
+   <build_depend>roseus</build_depend>
+   <build_depend>rostest</build_depend>
+   <build_depend>euscollada</build_depend>
+-  <build_depend>pr2_msgs</build_depend>
+-  <build_depend>pr2_controllers_msgs</build_depend>
+-  <build_depend>pr2_description</build_depend>
++  <!-- <build_depend>pr2_msgs</build_depend> -->
++  <!-- <build_depend>pr2_controllers_msgs</build_depend> -->
++  <!-- <build_depend>pr2_description</build_depend> -->
+   <build_depend>control_msgs</build_depend>
+-  <build_depend>move_base_msgs</build_depend>
++  <!-- <build_depend>move_base_msgs</build_depend> -->
+   <build_depend>nav_msgs</build_depend>
+   <build_depend>dynamic_reconfigure</build_depend>
+-  <build_depend>sound_play</build_depend>
++  <!-- <build_depend>sound_play</build_depend> -->
+ 
+   <run_depend>roseus</run_depend>
+   <run_depend>rostest</run_depend>
+   <run_depend>euscollada</run_depend>
+-  <run_depend>pr2_msgs</run_depend>
+-  <run_depend>pr2_controllers_msgs</run_depend>
+-  <run_depend>pr2_description</run_depend>
++  <!-- <run_depend>pr2_msgs</run_depend> -->
++  <!-- <run_depend>pr2_controllers_msgs</run_depend> -->
++  <!-- <run_depend>pr2_description</run_depend> -->
+   <run_depend>control_msgs</run_depend>
+-  <run_depend>move_base_msgs</run_depend>
++  <!-- <run_depend>move_base_msgs</run_depend> -->
+   <run_depend>nav_msgs</run_depend>
+   <run_depend>dynamic_reconfigure</run_depend>
+-  <run_depend>sound_play</run_depend>
++  <!-- <run_depend>sound_play</run_depend> -->
+ 
+ </package>
+ 
+-- 
+1.7.9.5
+
