@@ -1,0 +1,12 @@
+Source: ros-groovy-pr2eus
+Section: misc
+Priority: extra
+Maintainer: furuta <k-okada@jsk.t.u-tokyo.ac.jp>
+Build-Depends: debhelper (>= 7.0.50~), ros-groovy-catkin, ros-groovy-control-msgs, ros-groovy-dynamic-reconfigure, ros-groovy-euscollada, ros-groovy-nav-msgs, ros-groovy-roseus, ros-groovy-rostest
+Homepage: http://ros.org/wiki/pr2eus
+Standards-Version: 3.9.2
+
+Package: ros-groovy-pr2eus
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-groovy-control-msgs, ros-groovy-dynamic-reconfigure, ros-groovy-euscollada, ros-groovy-nav-msgs, ros-groovy-roseus, ros-groovy-rostest
+Description: pr2eus
