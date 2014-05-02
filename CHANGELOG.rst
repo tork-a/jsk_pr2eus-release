@@ -2,6 +2,28 @@
 Changelog for package pr2eus
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.5 (2014-05-03)
+------------------
+* Merge pull request #26 from k-okada/22_fix_use_sim_time_check
+  fix wrong commit on #22
+* fix wrong commit on #22
+* Contributors: Kei Okada
+
+0.1.4 (2014-05-02)
+------------------
+* add roseus_msgs to run_depend
+* Contributors: Kei Okada
+
+0.1.3 (2014-05-02)
+------------------
+* install sample program with executable bit
+* Contributors: Kei Okada
+
+0.1.2 (2014-05-01)
+------------------
+* install only lisp and launch files
+* Contributors: Kei Okada
+
 0.1.1 (2014-05-01)
 ------------------
 * add metapackage
