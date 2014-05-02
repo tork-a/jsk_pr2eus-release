@@ -1,4 +1,4 @@
-From a379460bcca76f203bbc49612b8556bf848735be Mon Sep 17 00:00:00 2001
+From e2d20fa7fd4aa774c70b9f4e53fa9048d681b972 Mon Sep 17 00:00:00 2001
 From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
 Date: Thu, 1 May 2014 02:30:54 +0900
 Subject: [PATCH] remove unsupported depend
