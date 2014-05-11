@@ -1,4 +1,4 @@
-From 6992a9250e833a30e1002900282b5a2a832e34fb Mon Sep 17 00:00:00 2001
+From 15525d37c5271b4cda60b0d670b1e94f4772b2a9 Mon Sep 17 00:00:00 2001
 From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
 Date: Sun, 11 May 2014 14:34:19 +0900
 Subject: [PATCH] comment out packages not ready for indigo
