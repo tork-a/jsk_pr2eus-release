@@ -1,4 +1,4 @@
-From adb66c85926d8660652abbb309230153ec5b2748 Mon Sep 17 00:00:00 2001
+From a6e582a2d8cbb4538893da604baa9a6787db58fc Mon Sep 17 00:00:00 2001
 From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
 Date: Thu, 1 May 2014 02:33:21 +0900
 Subject: [PATCH] add depend to pr2-related debs
