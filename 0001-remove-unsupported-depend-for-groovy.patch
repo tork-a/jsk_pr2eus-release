@@ -1,4 +1,4 @@
-From 121acde3521cf471135db0629bf18ab59d538bbf Mon Sep 17 00:00:00 2001
+From 406523ecae775dd2e3501b39690a6173d2f990d4 Mon Sep 17 00:00:00 2001
 From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
 Date: Sun, 11 May 2014 16:39:58 +0900
 Subject: [PATCH] remove unsupported depend for groovy
