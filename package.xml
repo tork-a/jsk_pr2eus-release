@@ -13,9 +13,9 @@
   <build_depend>roseus</build_depend>
   <build_depend>rostest</build_depend>
   <build_depend>euscollada</build_depend>
-  <!-- <build_depend>pr2_msgs</build_depend> -->
-  <!-- <build_depend>pr2_controllers_msgs</build_depend> -->
-  <!-- <build_depend>pr2_description</build_depend> -->
+  <build_depend>pr2_msgs</build_depend>
+  <build_depend>pr2_controllers_msgs</build_depend>
+  <build_depend>pr2_description</build_depend>
   <build_depend>control_msgs</build_depend>
   <build_depend>move_base_msgs</build_depend>
   <build_depend>nav_msgs</build_depend>
@@ -25,9 +25,9 @@
   <run_depend>roseus</run_depend>
   <run_depend>rostest</run_depend>
   <run_depend>euscollada</run_depend>
-  <!-- <run_depend>pr2_msgs</run_depend> -->
-  <!-- <run_depend>pr2_controllers_msgs</run_depend> -->
-  <!-- <run_depend>pr2_description</run_depend> -->
+  <run_depend>pr2_msgs</run_depend>
+  <run_depend>pr2_controllers_msgs</run_depend>
+  <run_depend>pr2_description</run_depend>
   <run_depend>control_msgs</run_depend>
   <run_depend>move_base_msgs</run_depend>
   <run_depend>nav_msgs</run_depend>
