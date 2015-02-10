@@ -1,4 +1,4 @@
-From 5c237c667d87839335a90419ff53808ad0b0c100 Mon Sep 17 00:00:00 2001
+From fa1e3cf25c0b2fa0edc5450f589018fc45902565 Mon Sep 17 00:00:00 2001
 From: Kei Okada <kei.okada@gmail.com>
 Date: Sat, 20 Dec 2014 17:06:01 +0900
 Subject: [PATCH] remove package which is not released for indigo
