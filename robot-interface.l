@@ -23,13 +23,35 @@
    (* 0.001 v))
   )
 
+(defclass controller-action-client
+  :super ros::simple-action-client
+  :slots (time-to-finish))
+(defmethod controller-action-client
+  (:init (&rest args)
+    (setq time-to-finish 0)
+    (send-super* :init args))
+  (:time-to-finish ()
+    (ros::ros-debug "[~A] time-to-fnish ~A" ros::name-space time-to-finish)
+    time-to-finish)
+  (:action-feedback-cb (msg)
+   (let ((finish-time) (current-time))
+     (ros::ros-debug "[~A] feedback-cb ~A" ros::name-space msg)
+     (unless (send ros::comm-state :action-goal) (return-from :action-feedback-cb nil))
+     (setq current-time (send msg :feedback :error :time_from_start)
+           finish-time (send (car (last (send (send ros::comm-state :action-goal) :goal :trajectory :points))) :time_from_start))
+     (when (string= (send (send ros::comm-state :action-goal) :goal_id :id)
+                    (send msg :status :goal_id :id))
+       (setq time-to-finish (send (ros::time- finish-time current-time) :to-sec)))
+     ))
+  )
+
 (defclass robot-interface
   :super propertied-object
   :slots (robot objects robot-state joint-action-enable warningp
                 controller-type controller-actions controller-timeout
                 namespace controller-table ;; hashtable :type -> (action)
                 visualization-topic
-                joint-states-topic
+                joint-states-topic pub-joint-states-topic
                 viewer groupname))
 
 (defmethod robot-interface
@@ -37,10 +59,12 @@
    (&rest args &key ((:robot r)) ((:objects objs)) (type :default-controller)
           (use-tf2) ((:groupname nh) "robot_multi_queue") ((:namespace ns))
           ((:joint-states-topic jst) "joint_states")
+          ((:publish-joint-states-topic pjst) nil)
           ((:controller-timeout ct) 3)
           ((:visuzlization-marker-topic vmt) "robot_interface_marker_array")
           &allow-other-keys)
    (setq joint-states-topic jst)
+   (setq pub-joint-states-topic pjst)
    (setq joint-action-enable t)
    (setq controller-timeout ct)
    (setq namespace ns)
@@ -57,10 +81,15 @@
    (when (ros::get-param "use_sim_time" nil)
      (ros::subscribe "/clock" rosgraph_msgs::Clock #'(lambda (msg)))
      (ros::ros-warn "/use_sim_time is TRUE, check if /clock is pusblished or not")
-     (unix:sleep 1)
+     (let ((cntr 0))
+       (while (and (= (ros::get-num-publishers "/clock") 0)
+                   (<= cntr 10))
+         (unix::usleep (* 100 1000)) ;; 100ms
+         (incf cntr)))
      (when (= (ros::get-num-publishers "/clock") 0)
        (ros::ros-error "/use_sim_time is TRUE and /clock is NOT PUBLISHED")
-       (exit 1)))
+       (exit 1))
+     (ros::unsubscribe "/clock"))
 
    (cond
     (use-tf2
@@ -77,7 +106,7 @@
    (setq controller-table (make-hash-table :size 14 :test #'eq :rehash-size 1.2))
    (setq controller-type type)
    (setq controller-actions
-         (send self :add-controller controller-type :joint-enable-check t))
+         (send self :add-controller controller-type :joint-enable-check t :create-actions t))
    ;;
    (when (send self :simulation-modep)
      (let ((old-viewer user::*viewer*))
@@ -89,39 +118,60 @@
          (send self :draw-objects)
          (send self :objects objs)
          (if old-viewer (setq user::*viewer* old-viewer)))
-       (ros::advertise (if namespace (format nil "~A/~A" namespace joint-states-topic)
-                         joint-states-topic) sensor_msgs::JointState 1)
+       (ros::advertise (cond
+                        (pub-joint-states-topic pub-joint-states-topic)
+                        (namespace
+                         (format nil "~A/~A" namespace joint-states-topic))
+                        (t joint-states-topic))
+                       sensor_msgs::JointState)
        ))
    self)
   ;;
-  (:add-controller (ctype &key (joint-enable-check))
+  (:add-controller (ctype &key (joint-enable-check) (create-actions))
    (let (tmp-actions)
-     (mapcar
-      #'(lambda (param)
-          (let* ((controller-action (cdr (assoc :controller-action param)))
-                 (action-type (cdr (assoc :action-type param)))
-                 (action (instance ros::simple-action-client :init
-                                   (if namespace (format nil "~A/~A" namespace controller-action)
-                                     controller-action) action-type
-                                   :groupname groupname)))
-            (push action tmp-actions)))
-      (send self ctype))
-     (setq tmp-actions (nreverse tmp-actions))
-     ;;
-     (dolist (action tmp-actions)
-       (unless (and joint-action-enable (send action :wait-for-server controller-timeout))
-         (ros::ros-warn "~A is not respond, ~A-interface is disabled" action (send robot :name))
-         (when joint-enable-check
-           (setq joint-action-enable nil)
-           (return))))
-     ;;
-     (dolist (param (send self ctype))
-       (let* ((controller-state (cdr (assoc :controller-state param)))
-              (key (intern (string-upcase controller-state) *keyword-package*)))
-         (ros::subscribe (if namespace (format nil "~A/~A" namespace controller-state)
-                           controller-state)
-                         pr2_controllers_msgs::JointTrajectoryControllerState
-                         #'send self :set-robot-state1 key :groupname groupname)))
+     (cond
+      (create-actions
+       (mapcar
+        #'(lambda (param)
+            (let* ((controller-action (cdr (assoc :controller-action param)))
+                   (action-type (cdr (assoc :action-type param)))
+                   (action (instance controller-action-client :init
+                                     (if namespace (format nil "~A/~A" namespace controller-action)
+                                       controller-action) action-type
+                                       :groupname groupname)))
+              (push action tmp-actions)))
+        (send self ctype))
+       (setq tmp-actions (nreverse tmp-actions))
+       ;;
+       (dolist (action tmp-actions)
+         (unless (and joint-action-enable (send action :wait-for-server controller-timeout))
+           (ros::ros-warn "~A is not respond, ~A-interface is disabled" action (send robot :name))
+           (when joint-enable-check
+             (setq joint-action-enable nil)
+             (return))))
+       ;;
+       (dolist (param (send self ctype))
+         (let* ((controller-state (cdr (assoc :controller-state param)))
+                (key (intern (string-upcase controller-state) *keyword-package*)))
+           (ros::subscribe (if namespace (format nil "~A/~A" namespace controller-state)
+                             controller-state)
+                           pr2_controllers_msgs::JointTrajectoryControllerState
+                           #'send self :set-robot-state1 key :groupname groupname)))
+       )
+      (t ;; not creating actions, just search
+       (mapcar
+        #'(lambda (param)
+            (let* ((controller-action (cdr (assoc :controller-action param)))
+                   (action-type (cdr (assoc :action-type param)))
+                   (name (if namespace (format nil "~A/~A" namespace controller-action)
+                           controller-action))
+                   action)
+              (setq action (find-if #'(lambda (ac) (string= name (send ac :name)))
+                                    controller-actions))
+              (if action (push action tmp-actions))
+              ))
+        (send self ctype))
+       ))
      ;;
      (setf (gethash ctype controller-table) tmp-actions)
      tmp-actions
@@ -133,22 +183,51 @@
      (setq msg (joint-list->joint_state joint-list))
      (send msg :header :stamp (ros::time-now))
      (when (send self :simulation-modep)
-       (ros::publish (if namespace (format nil "~A/~A" namespace joint-states-topic)
-                       joint-states-topic) msg))
+       (ros::publish (cond
+                        (pub-joint-states-topic pub-joint-states-topic)
+                        (namespace
+                         (format nil "~A/~A" namespace joint-states-topic))
+                        (t joint-states-topic))
+                     msg))
      msg))
+
+  (:angle-vector-duration
+   (start end &optional (scale 5) (min-time 1.0))
+   (let ((joint-list (send robot :joint-list))
+         )
+     (let ((diff (coerce (v- end start) cons)))
+       (let ((time-list (mapcar #'(lambda (d j)
+                                    (* scale (/ (deg2rad (abs d)) (send j :max-joint-velocity))))
+                                diff joint-list)))
+         (let ((max-time (apply #'max time-list)))
+           (max max-time min-time))))))
+
   (:angle-vector
-   (av &optional (tm 3000) (ctype controller-type))
-   ;; check max-joint-velocity
-   (let ((idx 0)
-         (diff-av (v- av (or (send self :state :potentio-vector) (send robot :angle-vector)))))
-     (dolist (jt (send robot :joint-list))
-       (cond ((derivedp jt linear-joint) ;; msec = mm / [m/sec]
-              (setq tm (max tm (abs (/ (elt diff-av idx) (send jt :max-joint-velocity))))))
-             ((derivedp jt rotational-joint) ;; msec = deg2rad(deg) / [rad/s] / 0.001
-              (setq tm (max tm (abs (/ (deg2rad (elt diff-av idx))
-                                       (send jt :max-joint-velocity) 0.001))))))
-       (incf idx)
-       ))
+   (av &optional (tm nil) (ctype controller-type) (start-time 0) &key (scale 5) (min-time 1.0))
+   "tm (time to goal in msec)
+   if designated tm is faster than fastest speed, use fastest speed
+   if not specified, it will use 1/5 of the fastest speed .
+   if :fastest is specefied use fastest speed calcurated from max speed"
+
+   ;;Check and decide tm
+   (let ((fastest-tm (* 1000 (send self :angle-vector-duration (send self :state :potentio-vector) av scale min-time))))
+     (cond
+      ;;Fastest time Mode
+      ((equal tm :fast)
+       (setq tm fastest-tm))
+      ;;Normal Number disgnated Mode
+      ((numberp tm)
+       (if (< tm fastest-tm)
+           (setq tm fastest-tm)))
+      ;;Safe Mode (Speed will be 5 * fastest-time)
+      ((null tm)
+       (setq tm (* 5 fastest-tm)))
+      ;;Error Not Good Input
+      (t
+       (ros::ros-error ":angle-vector tm is invalid.  args: ~A" tm)
+       (error ":angle-vector tm is invalid. args: ~A" tm)))
+     )
+
    ;; for simulation mode
    (when (send self :simulation-modep)
      (if av
@@ -169,7 +248,7 @@
       #'(lambda (action param)
           (send self :send-ros-controller
                 action (cdr (assoc :joint-names param)) ;; action server and joint-names
-                0  ;; start time
+                start-time  ;; start time
                 (list
                  (list av                                     ;; positions
                        (instantiate float-vector (length av)) ;; velocities
@@ -177,61 +256,87 @@
       cacts (send self ctype)))
    av)
   (:angle-vector-sequence
-   (avs &optional (tms (list 3000)) (ctype controller-type))
+   (avs &optional (tms (list 3000)) (ctype controller-type) (start-time 0.1) &key (scale 5) (min-time 1.0))
    (send self :spin-once) ;; for :state :potentio-vector
    (let ((st 0) (traj-points nil)
          (av-prev (send self :state :potentio-vector)) av av-next
-         tm tm-next
+         tm tm-next fastest-tm
          (vel (instantiate float-vector (length (car avs)))))
-       (prog1 ;; angle-vector-sequence returns avs
-	   avs
-	 (while avs
-	   (setq av (pop avs))
-	   (when (= (car tms) 0.0)
-	     (ros::ros-error "0.0 in time list @ :angle-vector-sequence"))
-	   (if (car tms) (setq tm (max (pop tms) 1.0))) ;; minimum is 1[msec]
-	   (if (setq av-next (car avs))
-	       (let ((v0 (send self :sub-angle-vector av av-prev))
-		     (v1 (send self :sub-angle-vector av-next av)))
-		 (setq tm-next (max (if (car tms) (car tms) tm) 1.0))
-		 (dotimes (i (length vel))
-		   (setf (elt vel i)
-			 (if (>= (* (elt v0 i) (elt v1 i)) 0)
-			     (* 0.5 (+ (* (/ 1000.0 tm) (elt v0 i))
-				       (* (/ 1000.0 tm-next) (elt v1 i))))
-			   0.0)))
-		 )
-	     (fill vel 0))
-	   ;; for simulation mode
-           (when (send self :simulation-modep)
-	     (let* ((prev-av (send robot :angle-vector))
-		    (scale-av (send self :sub-angle-vector av prev-av)))
-	       (do ((curr-tm 0.0 (+ curr-tm 100.0)))
-		   ((>= curr-tm tm))
-		 (send robot :angle-vector (v+ prev-av (scale (/ curr-tm tm) scale-av)))
-		 (send self :publish-joint-state)
-		 (if viewer (send self :draw-objects)))))
-	   ;;
-	   (send robot :angle-vector av)
-	   (push (list av
-		       (copy-seq vel)  ;; velocities
-		       (/ (+ st tm) 1000.0)) ;; tm + duration
-		 traj-points)
-	   (setq av-prev av)
-	   (incf st tm))
-	 ;;
-         (let ((cacts (gethash ctype controller-table)))
-           (unless cacts
-             (warn ";; controller-type: ~A not found" ctype)
-             (return-from :angle-vector-sequence))
-           (mapcar
-            #'(lambda (action param)
-                (send self :send-ros-controller
-                      action (cdr (assoc :joint-names param)) ;; action server and joint-names
-                      0.1   ;; start time
-                      traj-points))
-            cacts (send self ctype)))
-         )))
+     (prog1 ;; angle-vector-sequence returns avs
+         avs
+       (while avs
+         (setq av (pop avs))
+         (setq fastest-tm (* 1000 (send self :angle-vector-duration av-prev av scale min-time)))
+         (setq tm (pop tms))
+         (cond
+          ((equal tm :fast)
+           (setq tm fastest-tm))
+          ((null tm)
+           (setq tm (* 5 fastest-tm)))
+          ((numberp tm)
+           (if (< tm fastest-tm)
+               (setq tm fastest-tm)))
+          (t (ros::ros-error ":angle-vector-sequence tm is invalid.  args: ~A" tm)
+             (error ":angle-vector-sequence tm is invalid. args: ~A" tm)))
+         (if (car tms)
+             (progn
+               (setq tm-next ( car tms))
+               (setq fastest-tm-next (* 1000 (send self :angle-vector-duration av (car avs) scale min-time)))
+               (cond
+                ((equal tm-next :fast)
+                 (setq tm-next fastest-tm-next))
+                ((null tm)
+                 (setq tm (* 5 fastest-tm)))
+                ((numberp tm-next)
+                 (if (< tm-next fastest-tm-next)
+                     (setq tm-next fastest-tm-next)))
+                (t (ros::ros-error ":angle-vector-sequence tm is invalid.  args: ~A" tm)
+                   (error ":angle-vector-sequence tm is invalid. args: ~A" tm)))
+               )
+           (setq tm-next 1)
+           )
+
+         (if (setq av-next (car avs))
+             (let ((v0 (send self :sub-angle-vector av av-prev))
+                   (v1 (send self :sub-angle-vector av-next av)))
+               (dotimes (i (length vel))
+                 (setf (elt vel i)
+                       (if (>= (* (elt v0 i) (elt v1 i)) 0)
+                           (* 0.5 (+ (* (/ 1000.0 tm) (elt v0 i))
+                                     (* (/ 1000.0 tm-next) (elt v1 i))))
+                         0.0)))
+               )
+           (fill vel 0))
+         ;; for simulation mode
+         (when (send self :simulation-modep)
+           (let* ((prev-av (send robot :angle-vector))
+                  (scale-av (send self :sub-angle-vector av prev-av)))
+             (do ((curr-tm 0.0 (+ curr-tm 100.0)))
+                 ((>= curr-tm tm))
+               (send robot :angle-vector (v+ prev-av (scale (/ curr-tm tm) scale-av)))
+               (send self :publish-joint-state)
+               (if viewer (send self :draw-objects)))))
+         ;;
+         (send robot :angle-vector av)
+         (push (list av
+                     (copy-seq vel)  ;; velocities
+                     (/ (+ st tm) 1000.0)) ;; tm + duration
+               traj-points)
+         (setq av-prev av)
+         (incf st tm))
+       ;;
+       (let ((cacts (gethash ctype controller-table)))
+         (unless cacts
+           (warn ";; controller-type: ~A not found" ctype)
+           (return-from :angle-vector-sequence))
+         (mapcar
+          #'(lambda (action param)
+              (send self :send-ros-controller
+                    action (cdr (assoc :joint-names param)) ;; action server and joint-names
+                    start-time  ;; start time
+                    traj-points))
+          cacts (send self ctype)))
+       )))
   (:wait-interpolation (&optional (ctype) (timeout 0)) ;; controller-type
    (when (send self :simulation-modep)
      (return-from :wait-interpolation nil))
@@ -240,6 +345,23 @@
      (let ((cacts (gethash ctype controller-table)))
        (send-all cacts :wait-for-result :timeout timeout)))
     (t (send-all controller-actions :wait-for-result :timeout timeout))))
+  (:interpolatingp (&optional (ctype)) ;; controller-type ;; check someone is moving
+    (send self :spin-once)
+    (some #'(lambda (x) (eq x actionlib_msgs::GoalStatus::*active*)) (send-all controller-actions :get-state)))
+  (:wait-interpolation-smooth (time-to-finish &optional (ctype))
+    (while (null (send self :interpolating-smoothp time-to-finish ctype))
+      (send self :ros-wait 0.005)))
+  (:interpolating-smoothp (time-to-finish &optional (ctype)) ;; controller-type
+   (when (send self :simulation-modep)
+     (return-from :wait-interpolation nil))
+   (send self :spin-once)
+   (every #'(lambda (x) (< x (/ time-to-finish 1000.0)))
+          (cond
+           (ctype
+            (let ((cacts (gethash ctype controller-table)))
+              (send-all cacts :time-to-finish)))
+           (t
+            (send-all controller-actions :time-to-finish)))))
   (:stop-motion (&key (stop-time 0))
    (let ((av (send self :state :potentio-vector)))
      (send self :angle-vector av stop-time)
@@ -293,7 +415,9 @@
        (return-from :send-ros-controller nil))
    (let* ((goal (send action :make-goal-instance))
 	  (goal-points nil)
-	  (st (ros::time+ (ros::time-now) (ros::time starttime)))
+	  (st (if (numberp starttime)
+                  (ros::time+ (ros::time-now) (ros::time starttime))
+                starttime))
 	  (joints (mapcar #'(lambda (x)
 			      (send robot (intern (string-upcase x) *keyword-package*)))
 			  joint-names)))
@@ -338,16 +462,73 @@
    (key msg)
      (if (assoc key robot-state)
 	 (setf (cdr (assoc key robot-state)) msg)
-       (push (cons key msg) robot-state)))   
+       (push (cons key msg) robot-state)))
   (:ros-state-callback
    (msg)
-   (dolist (key '(:name :position :velocity :effort))
-     (send self :set-robot-state1 key (send msg key)))
-   (send self :set-robot-state1 :stamp (send msg :header :stamp)))
+   (let ((robot-state-names (cdr (assoc :name robot-state))))
+     ;; set joint name
+     (cond
+      (robot-state-names
+       ;; merge robot-state name list
+       (let ((diff (set-difference (send msg :name) robot-state-names :test #'string=)))
+         (when diff
+           (setq robot-state-names (append robot-state-names diff))
+           ;; resize joint-state data list
+           (dolist (key '(:position :velocity :effort))
+             (setf (cdr (assoc key robot-state))
+                   (concatenate float-vector
+                                (cdr (assoc key robot-state))
+                                (instantiate float-vector (- (length robot-state-names)
+                                                             (length (cdr (assoc key robot-state))))))))
+           ;; resize stamp-list
+           (setf (cdr (assoc :stamp-list robot-state))
+                 (concatenate cons
+                              (cdr (assoc :stamp-list robot-state))
+                              (make-list (- (length robot-state-names) (length (cdr (assoc :stamp-list robot-state))))))))
+         ))
+      (t
+       (push (cons :name (send msg :name)) robot-state)
+       (setq robot-state-names (send msg :name))
+       (dolist (key '(:position :velocity :effort))
+         (push (cons key (instantiate float-vector (length robot-state-names))) robot-state))
+       (push (cons :stamp-list (make-list (length robot-state-names))) robot-state)))
+     ;; set joint data
+     (let ((joint-names (send msg :name))
+           (stamp-list (cdr (assoc :stamp-list robot-state)))
+           (idx 0) joint-idx joint-data data-vec)
+       (dolist (key '(:position :velocity :effort))
+         (setq joint-data (send msg key) idx 0)
+         (when (= (length joint-names) (length joint-data))
+           (setq data-vec (cdr (assoc key robot-state)))
+           (dolist (jn joint-names)
+             (setq joint-idx (position jn robot-state-names :test #'string=))
+             (setf (elt data-vec joint-idx) (elt joint-data idx))
+             (incf idx)
+             ;; update stamp
+             (when (eq key :position)
+               (setf (elt stamp-list joint-idx) (send msg :header :stamp)))
+             ))))
+     (setf (cdr (assoc :name robot-state)) robot-state-names)
+     ;; (dolist (key '(:name :position :velocity :effort))
+     ;;   (send self :set-robot-state1 key (send msg key)))
+     (send self :set-robot-state1 :stamp (send msg :header :stamp))))
+  (:wait-until-update-all-joints
+   (tgt-tm)
+   (let ((initial-time))
+     (if (equal (class tgt-tm) (class (ros::time 0)))
+	 (setq initial-time (send tgt-tm :to-nsec))
+       (setq initial-time (send (send (ros::time) :now) :to-nsec)))
+     (while t
+       (when (null (position-if #'null (mapcar #'(lambda (ts) (> (send ts :to-nsec) initial-time)) (cdr (assoc :stamp-list robot-state)))))
+         (return-from nil nil))
+       (send self :spin-once)
+       )))
   (:update-robot-state
-   ()
+   (&key (wait-until-update nil))
    (let (joint-names positions velocities efforts)
      (send self :spin-once)
+     (when wait-until-update
+       (send self :wait-until-update-all-joints wait-until-update))
      ;; (unless joint-action-enable
      ;;   (return-from :update-robot-state (send robot :angle-vector)))
      (unless robot-state (return-from :update-robot-state))
@@ -374,7 +555,8 @@
 	     (coerce efforts cons))))
   (:state
    (&rest args)
-   (send self :update-robot-state)
+   (send self :update-robot-state
+         :wait-until-update (when (position :wait-until-update args) (elt args (+ (position :wait-until-update args) 1))))
    (unless args (return-from :state))
    (case (car args)
      ((:potentio-vector :angle-vector)
@@ -622,6 +804,20 @@
      (send msg :markers markers-list)
      (ros::publish visualization-topic msg)
      ))
+  (:nod
+   (&key (angle 40) (time 3000))
+   (let (prev-neck-p)
+     (send self :update-robot-state)
+     (send self :robot :angle-vector (send self :state :reference-vector))
+     (setq prev-neck-p (send self :robot :head :neck-p :joint-angle))
+     (send self :robot :head :neck-p :joint-angle angle)
+     (send self :angle-vector (send self :robot :angle-vector) time)
+     (send self :wait-interpolation)
+     (send self :robot :head :neck-p :joint-angle prev-neck-p)
+     (send self :angle-vector (send self :robot :angle-vector) time)
+     (send self :wait-interpolation)
+     )
+   )
   )
 ;;
 (defclass ros-interface
@@ -720,5 +916,19 @@
     (list (nreverse avs)
           (nreverse tms))
     ))
+
+(defun make-robot-interface-from-name (name &rest args)
+  "make a robot model from string: (make-robot-model \"pr2\")"
+  (let ((klass (read-from-string (format nil "~A-interface" robot-name))))
+    (if (and (boundp klass) (subclassp (eval klass) robot-interface))
+        (instance* (eval klass) :init args)
+      (error "No such subclass of robot-interface : ~A~%" klass))))
+
+(defun init-robot-from-name (robot-name &rest args)
+  "call ${robot}-init function"
+  (apply (symbol-function
+          (intern (string-upcase (format nil "~A-init" robot-name)))) args)
+  (setq *robot* (eval (intern (string-upcase (format nil "*~A*" robot-name))))))
+
 
 (provide :robot-interface "robot-interface.l")
