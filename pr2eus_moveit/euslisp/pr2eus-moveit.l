@@ -43,11 +43,13 @@
           scene-service
           planning-service
           execute-service
+          check-validity-service
           query-planner-interface-service
           planning-scene-world-topic
           robot
           default-frame-id default-link
           multi-dof-name multi-dof-frame
+          use-action planning-action-client
           ))
 
 ;; frame-id
@@ -60,12 +62,14 @@
          ((:execute-service ex-srv) "/execute_kinematic_path")
          ((:query-planner-interface-service qr-pl-srv) "/query_planner_interface")
          ((:planning-scene-world pl-sc-world) "/planning_scene_world")
+         ((:state-validity-service sv-srv) "/check_state_validity")
          ((:robot rb) *pr2*) (frame-id "base_footprint") ;; frame-id needs to be contained in robot_model
          (multi-dof-joint-name "virtual_joint")
          (multi-dof-frame-id "odom_combined"))
    (setq scene-service sc-srv
          planning-service pl-srv
          execute-service ex-srv
+         check-validity-service sv-srv
          query-planner-interface-service qr-pl-srv
          planning-scene-world-topic pl-sc-world
          robot rb
@@ -87,6 +91,16 @@
      (send r-to :angle-vector (send r-from :angle-vector))
      (send r-to :worldcoords)
      r-to))
+  (:init-action-client ()
+   (unless planning-action-client
+     (setq planning-action-client
+           (instance ros::simple-action-client :init
+                     "/move_group" moveit_msgs::MoveGroupAction
+                     :groupname "pr2eus_moveit"))
+     (send planning-action-client :wait-for-server)
+     ))
+  (:use-action (&optional (use :use-action)) (unless (eq use :use-action) (setq use-action use)) use-action)
+  (:action-client (&rest args) (forward-message-to planning-action-client args))
   (:search-link-from-name
    (link-name)
    (cond
@@ -129,12 +143,21 @@
                      (send self :search-link-from-name "l_wrist_roll_link"))
                (cons :joint-list (append (send robot :torso :joint-list) (send robot :larm :joint-list)))
                )
-         (list :arms ;; not implemented yet
+         (list :arms ;; can not use inverse-kinematics
                (cons :group-name "arms")
                (cons :target-link
                      (list (send self :search-link-from-name "l_wrist_roll_link")
                            (send self :search-link-from-name "r_wrist_roll_link")))
                (cons :joint-list (append (send robot :larm :joint-list)
+                                         (send robot :rarm :joint-list)))
+               )
+         (list :arms-torso ;; can not use inverse-kinematics
+               (cons :group-name "arms_and_torso")
+               (cons :target-link
+                     (list (send self :search-link-from-name "l_wrist_roll_link")
+                           (send self :search-link-from-name "r_wrist_roll_link")))
+               (cons :joint-list (append (send robot :torso :joint-list)
+                                         (send robot :larm :joint-list)
                                          (send robot :rarm :joint-list)))
                )
 #| ;; sample of pr2_moveit_config/config/pr2.srdf
@@ -189,6 +212,11 @@
   (:clear-world-scene ()
    (let ((msg (instance moveit_msgs::PlanningSceneWorld :init)))
      (ros::publish planning-scene-world-topic msg)))
+  (:check-state-validity ()
+   (let* ((rmsg (send self :get-planning-scene moveit_msgs::PlanningSceneComponents::*ROBOT_STATE*))
+          (msg (instance moveit_msgs::GetStateValidityRequest :init :robot_state (send rmsg :robot_state))))
+     (ros::service-call check-validity-service msg)
+     ))
   (:convert-end-coords
    (cds confkey end-coords )
    (let ((tgt-cds (send cds :copy-worldcoords))
@@ -311,6 +339,15 @@
      (send mpr :num_planning_attempts planning-attempts)
      (send mpr :allowed_planning_time planning-time)
      ;;(print-ros-msg mpr)
+     (when use-action
+       (send self :init-action-client)
+       (let ((goal (send planning-action-client :make-goal-instance)))
+         (send goal :header :seq 1)
+         (send goal :header :stamp (ros::time-now))
+         (send goal :goal :request mpr)
+         (send goal :goal :planning_options :plan_only t)
+         (send planning-action-client :send-goal goal))
+       (return-from :motion-plan-constraints nil))
      (setq res
            (ros::service-call planning-service
                               (instance moveit_msgs::GetMotionPlanRequest
@@ -331,27 +368,27 @@
        (send self :execute-trajectory (send ret :trajectory) :wait wait))))
   (:planning-make-trajectory
    (confkey &rest args &key (set-angle-vector) (scene) (use-scene t) (planning-time 5.0)
-            (planning-attemps 3) (retry) &allow-other-keys)
+            (planning-attempts 3) (retry) &allow-other-keys)
    (let (ret)
      (if set-angle-vector (send robot :angle-vector set-angle-vector))
      (unless scene (setq scene (send self :get-planning-scene)))
      (setq ret
            (send* self :motion-plan confkey
-                  :planning-time planning-time :planning-attemps planning-attemps
+                  :planning-time planning-time :planning-attempts planning-attempts
                   :scene (if use-scene scene) args))
      (when (and retry (not ret)) ;; retry
        (when get-scene (setq scene (send self :get-planning-scene)))
        (setq ret
              (send* self :motion-plan confkey
                     :planning-time (* 2 planning-time)
-                    :planning-attemps (* 2 planning-attemps)
+                    :planning-attempts (* 2 planning-attempts)
                     :scene (if use-scene scene) args)))
      ret
      ))
   (:planning-make-trajectory-to-coords-no-ik
    (cds confkey &rest args &key (end-coords) ;; (list :rarm :end-coords)
         (planning-time 5.0) (scene) (frame-id default-frame-id)
-        (planning-attemps 3) (retry) (use-scene t)
+        (planning-attempts 3) (retry) (use-scene t)
         ((:tolerance_x tx) 0) ((:tolerance_y ty) 0) ((:tolerance_z tz) 0)
         ((:tolerance_rx rx) 0) ((:tolerance_ry ry) 0) ((:tolerance_rz rz) 0)
         &allow-other-keys)
@@ -371,7 +408,7 @@
      (setq ret
            (send* self :motion-plan-constraints confkey
                   :goal-constraints const
-                  :planning-time planning-time :planning-attemps planning-attemps
+                  :planning-time planning-time :planning-attempts planning-attempts
                   :scene (if use-scene scene) args))
      (when (and retry (not ret)) ;; retry
        (when get-scene (setq scene (send self :get-planning-scene)))
@@ -379,14 +416,14 @@
              (send* self :motion-plan-constraints confkey
                     :goal-constraints const
                     :planning-time (* 2 planning-time)
-                    :planning-attemps (* 2 planning-attemps)
+                    :planning-attempts (* 2 planning-attempts)
                     :scene (if use-scene scene) args)))
      ret
      ))
   (:planning-make-trajectory-to-coords ;; use-ik
    (cds confkey &rest args &key (end-coords) ;; (list :rarm :end-coords)
         (planning-time 5.0) (scene) (frame-id default-frame-id)
-        (planning-attemps 3) (retry) (use-scene t)
+        (planning-attempts 3) (retry) (use-scene t)
         &allow-other-keys)
    (let (ret)
      (unless scene (setq scene (send self :get-planning-scene)))
@@ -394,24 +431,24 @@
                    :use-actual-seed t :retry retry :frame-id frame-id :scene scene)
        (return-from :planning-make-trajectory-to-coords nil))
      (send* self :planning-make-trajectory confkey
-           :planning-time planning-time :planning-attemps planning-attemps
+           :planning-time planning-time :planning-attempts planning-attempts
            :use-scene use-scene :scene scene :retry retry args)
      ))
   (:planning-move-arm
    (confkey &key (set-angle-vector) (scene) (use-scene t) (planning-time 5.0)
-            (planning-attemps 3) (retry) (wait t) &allow-other-keys)
+            (planning-attempts 3) (retry) (wait t) &allow-other-keys)
    (let (ret)
      (if set-angle-vector (send robot :angle-vector set-angle-vector))
      (unless scene (setq scene (send self :get-planning-scene)))
      (setq ret
            (send self :move-arm-to-goal confkey :scene (if use-scene scene)
-                 :planning-attemps planning-attemps
+                 :planning-attempts planning-attempts
                  :planning-time planning-time :wait wait))
      (when (and retry (not ret)) ;; retry
        (if scene (setq scene (send self :get-planning-scene))) ;; override scene
        (setq ret
              (send self :move-arm-to-goal confkey :scene (if use-scene scene)
-                   :planning-attemps (* 2 planning-attemps)
+                   :planning-attempts (* 2 planning-attempts)
                    :planning-time (* 2 planning-time) :wait wait))
        )
      ret
@@ -419,7 +456,7 @@
   (:planning-move-arm-to-coords
    (cds confkey &key (end-coords) ;; (list :rarm :end-coords)
         (planning-time 5.0) (scene) (frame-id default-frame-id)
-        (planning-attemps 3) (retry) (use-scene t) (wait t)
+        (planning-attempts 3) (retry) (use-scene t) (wait t)
         &allow-other-keys)
    (let (ret)
      (unless scene (setq scene (send self :get-planning-scene)))
@@ -427,7 +464,7 @@
                    :use-actual-seed t :retry retry :frame-id frame-id :scene scene)
        (return-from :planning-move-arm-to-coords nil))
      (send self :planning-move-arm confkey
-           :planning-time planning-time :planning-attemps planning-attemps
+           :planning-time planning-time :planning-attempts planning-attempts
            :use-scene use-scene :wait wait :scene scene)
      ))
   )
@@ -444,13 +481,20 @@
   (:planning-environment (&rest args)
    (let ((env (get self :moveit-environment)))
      (when env (forward-message-to env args))))
+  (:update-planning-robot ()
+   (send self :state)
+   (send self :planning-environment
+         :sync-robot-model robot))
   (:parse-end-coords (arm use-torso)
    (let (confkey ed-lst)
      (cond
       ((eq arm :rarm)
        (setq confkey (if use-torso :rarm-torso :rarm))
        (setq  ed-lst (list :rarm :end-coords)))
-      (t
+      ((eq arm :arms)
+       (setq confkey (if use-torso :arms-torso :arms))
+       (setq ed-lst nil)) ;; can not use inverse-kinematics
+      (t ;;(eq arm :larm)
        (setq confkey (if use-torso :larm-torso :larm))
        (setq  ed-lst (list :larm :end-coords))))
      (cons confkey ed-lst)))
