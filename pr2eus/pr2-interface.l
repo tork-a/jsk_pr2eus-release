@@ -109,7 +109,9 @@
    (send-super :publish-joint-state (append (send robot :joint-list) (send robot :larm :gripper :joint-list) (send robot :rarm :gripper :joint-list))))
   ;;
   (:wait-interpolation (&rest args);; overwrite for pr2, due to some joint is stll moving after joint-trajectry-action stops
-   (unless joint-action-enable (return-from :wait-interpolation nil))
+   (unless joint-action-enable (return-from :wait-interpolation
+                                 (make-sequence cons (length controller-actions)
+                                                :initial-element t)))
    (let (result)
      (ros::ros-info "wait-interpolation debug: start")
    ;;  (setq result (send-all controller-actions :wait-for-result))
@@ -330,6 +332,51 @@
          (send move-base-trajectory-action :cancel-all-goals)
        (if force-stop (send self :go-velocity 0 0 0)))
      ))
+  
+  (:make-plan
+   (st-cds goal-cds &key (start-frame-id "/world") (goal-frame-id "/world"))
+   (let ((req (instance nav_msgs::GetPlanRequest :init))
+	 (tm (ros::time-now))
+	 map-to-frame 
+	 map-to-base
+	 res
+	 plan-cds-seq)
+     (setq map-to-base (send *tfl* :lookup-transform "/map" "/base_footprint" (ros::time 0)))
+     (setq map-to-frame (send *tfl* :lookup-transform "/map" start-frame-id (ros::time 0)))
+     (send req :start :header :stamp)
+     (send req :start :header :stamp tm)
+     (if map-to-frame
+	 (progn
+	   (send req :start :header :frame_id "/map")
+	   (send req :start :pose (ros::coords->tf-pose (send (send st-cds :copy-worldcoords) :transform map-to-frame :world))))
+       (progn 
+	   (send req :start :header :frame_id frame-id)
+	   (send req :start :pose (ros::coords->tf-pose st-cds))))
+     (setq map-to-frame (send *tfl* :lookup-transform "/map" goal-frame-id (ros::time 0)))
+     (send req :goal :header :stamp tm)
+     (if map-to-frame
+	 (progn
+	   (send req :goal :header :frame_id "/map")
+	   (send req :goal :pose (ros::coords->tf-pose (send (send goal-cds :copy-worldcoords) :transform map-to-frame :world))))
+       (progn
+	 (send req :start :header :frame_id frame-id)
+	 (send req :start :pose (ros::coords->tf-pose st-cds))))
+
+     (setq res (ros::service-call "/move_base_node/make_plan" req))
+     (unless (send res :plan :poses)
+       (return-from :make-plan nil))
+     (setq plan-cds-seq (mapcar #'(lambda (p-stamped)
+				    (let ((cds (ros::tf-pose->coords (send p-stamped :pose))))
+				      (if map-to-base
+					  (progn
+					    (send cds :transform (send map-to-base :inverse-transformation) :world)
+					;;(send cds :transform (send *pr2* :copy-worldcoords) :world))
+					    )
+					cds)))
+				(send res :plan :poses)))
+     plan-cds-seq))
+     
+     
   (:move-to
    (coords &key (retry 10) (frame-id "/world") (wait-for-server-timeout 5))
    (let (ret (count 0) (tm (ros::time-now))
@@ -514,38 +561,109 @@
        (incf counter)
        ) ;; while
      t))
+  (:move-trajectory-sequence
+   (trajectory-points time-list &key (stop t) (start-time) (send-action nil))
+   "trajectory-points [ list of #f(x y d) ] time-list [list of time span]
+stop [ stop after msec moveing ]
+start-time [ robot will move at start-time ]
+send-action [ send message to action server, it means robot will move ]"
+   (send self :move-trajectory trajectory-points time-list nil nil
+         :stop stop :start-time start-time :send-action send-action))
   (:move-trajectory
-   (x y d &optional (msec 1000) &key (stop t)) ;; [m/sec] [m/sec] [rad/sec]
+   (x y d &optional (msec 1000) &key (stop t) (start-time) (send-action nil))
+" x [m/sec] y [m/sec] d [rad/sec] msec [milli second]
+stop [ stop after msec moveing ]
+start-time [ robot will move at start-time ]
+send-action [ send message to action server, it means robot will move ]"
    (send self :spin-once)
-   (let ((sec (/ msec 1000.0))
-	 (odom-pos (scale 0.001 (send (send self :state :odom :pose) :pos)))
-	 (odom-angle (elt (car (send (send self :state :odom :pose) :rpy-angle)) 0))
-	 (msg (instance trajectory_msgs::JointTrajectory :init))
-	 (goal (instance pr2_controllers_msgs::JointTrajectoryActionGoal :init))
-	 (pt1 (instance trajectory_msgs::JointTrajectoryPoint :init))
-	 (pt2 (instance trajectory_msgs::JointTrajectoryPoint :init)))
-     (send pt1 :time_from_start (ros::time))
-     (send pt2 :time_from_start (ros::time sec))
-     (send pt1 :positions (v+ odom-pos
-			      (float-vector 0 0 odom-angle)))
-     (send pt2 :positions (v+ (v+ odom-pos
-				  (float-vector 0 0 (+ odom-angle (* sec d))))
-			     (rotate-vector (scale sec (float-vector x y 0))
-					    odom-angle :z)))
-     (send pt1 :velocities (rotate-vector (float-vector x y d) odom-angle :z))
-     (if stop
-	 (send pt2 :velocities (float-vector 0 0 0)) ;; To stop just
-       (send pt2 :velocities (rotate-vector (float-vector x y d) odom-angle :z)))
-
-     (ros::ros-debug "move-trajectory (x y d msec) = (~A ~A ~A ~A)" (* sec x) (* sec y) (* sec d) msec)
-     (ros::ros-debug "                odom-pos ~A, odom-angle ~A" odom-pos odom-angle)
-     (ros::ros-debug "                pt1 ~A" (send pt1 :positions))
-     (ros::ros-debug "                pt2 ~A" (send pt2 :positions))
-     ;;
-     (send msg :header :stamp (ros::time-now))
+   (let ((odom-cds (send self :state :odom :pose))
+         (msg (instance trajectory_msgs::JointTrajectory :init))
+         (goal (instance pr2_controllers_msgs::JointTrajectoryActionGoal :init)))
+     (cond
+      ((numberp start-time)
+       (send msg :header :stamp (ros::time+ (ros::time-now) (ros::time start-time))))
+      (start-time (send msg :header :stamp start-time))
+      (t (send msg :header :stamp (ros::time-now))))
      (send msg :joint_names (list "base_link_x" "base_link_y" "base_link_pan"))
-	 (send msg :points (list pt1 pt2))
+     (cond
+      ((and (listp x) (listp y))
+       (let ((traj-lst
+              (mapcar #'(lambda (vec)
+                          (send
+                           (make-coords :pos (float-vector (elt vec 0) (elt vec 1) 0)
+                                        :rpy (list (elt vec 2) 0 0))
+                           :transform odom-cds :world)) x))
+             (cur-cds (send odom-cds :copy-worldcoords))
+             (cur-time 0)
+             nxt-cds nxt-time ret)
+         (pprint traj-lst)
+         (setq nxt-cds  (pop traj-lst)
+               nxt-time (pop y))
+         (while nxt-cds
+           (let* ((vr (send cur-cds :transformation nxt-cds))
+                  (vp (send cur-cds :rotate-vector (send vr :pos))))
+             (push
+              (instance trajectory_msgs::JointTrajectoryPoint :init
+                        :positions (float-vector
+                                    (/ (elt (send cur-cds :pos) 0) 1000)
+                                    (/ (elt (send cur-cds :pos) 1) 1000)
+                                    (caar (send cur-cds :rpy-angle)))
+                        :velocities (float-vector
+                                     (/ (elt vp 0) nxt-time)
+                                     (/ (elt vp 1) nxt-time)
+                                     (/ (caar (send vr :rpy-angle)) nxt-time 0.001))
+                        :time_from_start (ros::time cur-time))
+              ret))
+           (incf cur-time (/ nxt-time 1000.0))
+           (setq cur-cds  nxt-cds
+                 nxt-cds  (pop traj-lst)
+                 nxt-time (pop y))
+           ) ;; (while nxt-cds
+         (push ;; push last point
+          (instance trajectory_msgs::JointTrajectoryPoint :init
+                    :positions (float-vector
+                                (/ (elt (send cur-cds :pos) 0) 1000)
+                                (/ (elt (send cur-cds :pos) 1) 1000)
+                                (caar (send cur-cds :rpy-angle)))
+                    :velocities (if stop (float-vector 0 0 0)
+                                  (send (car ret) :velocities))
+                    :time_from_start (ros::time cur-time))
+          ret)
+         (send msg :points (nreverse ret))
+         ))
+      (t
+       (let ((sec (/ msec 1000.0))
+             (odom-angle (elt (car (send odom-cds :rpy-angle)) 0))
+             (odom-pos (scale 0.001 (send odom-cds :pos)))
+             (pt1 (instance trajectory_msgs::JointTrajectoryPoint :init))
+             (pt2 (instance trajectory_msgs::JointTrajectoryPoint :init)))
+         (send pt1 :time_from_start (ros::time))
+         (send pt2 :time_from_start (ros::time sec))
+         (send pt1 :positions (v+ odom-pos
+                                  (float-vector 0 0 odom-angle)))
+         (send pt2 :positions (v+ (v+ odom-pos
+                                      (float-vector 0 0 (+ odom-angle (* sec d))))
+                                  (rotate-vector (scale sec (float-vector x y 0))
+                                                 odom-angle :z)))
+         (send pt1 :velocities (rotate-vector (float-vector x y d) odom-angle :z))
+         (if stop
+             (send pt2 :velocities (float-vector 0 0 0)) ;; To stop just
+           (send pt2 :velocities (rotate-vector (float-vector x y d) odom-angle :z)))
+
+         (ros::ros-debug "move-trajectory (x y d msec) = (~A ~A ~A ~A)" (* sec x) (* sec y) (* sec d) msec)
+         (ros::ros-debug "                odom-pos ~A, odom-angle ~A" odom-pos odom-angle)
+         (ros::ros-debug "                pt1 ~A" (send pt1 :positions))
+         (ros::ros-debug "                pt2 ~A" (send pt2 :positions))
+         ;;
+         (send msg :points (list pt1 pt2)))
+       ))
      (send goal :goal :trajectory msg)
+     (when send-action
+       (send move-base-trajectory-action :send-goal goal)
+       (let ((acret
+              (send move-base-trajectory-action :wait-for-result)))
+         (unless acret (return-from :move-trajectory nil))
+         (send move-base-trajectory-action :spin-once)))
      ;;
      goal))
   ;;
@@ -704,11 +822,36 @@
                                                 #f(0 60 -80 -121 -15 -90 20)))
 (defconstant *pr2-tuckarm-pose-larm-free* (list #f(0 60 80 -121 15 -90 -20)
                                                 #f(-5 70 -105 -90 70 -6 20)))
+(defconstant *pr2-tuckarm-pose-rarm-free-outside* (list #f(4 74.3 110.3 -82.3 -80.2 -5.7 -20)
+                                                        #f(0.4 74.3 -102.3 -121.5 78.6 -114.6 58.1)))
+(defconstant *pr2-tuckarm-pose-larm-free-outside* (list #f(-0.4 74.3 102.3 -121.5 -78.6 -114.6 -58.1)
+                                                        #f(-4 74.3 -110.3 -82.3 80.2 -5.7 20)))
 
-;; check if current pose is tuckarm pose or not
-;;       which arm is free
-;; args = () (:rarm) (:larm)
-;; return = nil :rarm :larm
+(defun get-tuckarm (free-arm dir arm)
+  (if (eq free-arm :larm)
+      (if (eq dir :inside)
+          (if (eq arm :larm)
+              (car *pr2-tuckarm-pose-larm-free*)
+            (cadr *pr2-tuckarm-pose-larm-free*)
+            )
+        (if (eq arm :larm)
+            (car *pr2-tuckarm-pose-larm-free-outside*)
+          (cadr *pr2-tuckarm-pose-larm-free-outside*)
+          )
+        )
+    (if (eq dir :inside)
+        (if (eq arm :larm)
+            (car *pr2-tuckarm-pose-rarm-free*)
+          (cadr *pr2-tuckarm-pose-rarm-free*)
+          )
+      (if (eq arm :larm)
+          (car *pr2-tuckarm-pose-rarm-free-outside*)
+        (cadr *pr2-tuckarm-pose-rarm-free-outside*)
+        )
+      )
+    )
+  )
+
 (defun check-tuckarm-pose (&key (thre 20) &rest args)
   (send *pr2* :angle-vector (send *ri* :state :potentio-vector))
   (let ((l-angle (map float-vector #'(lambda(d)(- d (* 360 (round (/ d 360.0)))))
@@ -732,6 +875,7 @@
 (defun pr2-tuckarm-pose (&rest args)
   (let* ((current-arm (check-tuckarm-pose :thre 40)) ;; nil rarm larm
          (free-arm (or (car args) current-arm :larm))
+         (side (or (cadr args) :inside))
          (msec 500))
     (when (not (eq current-arm free-arm))
       (progn
@@ -743,18 +887,18 @@
         ))
     (if (eq free-arm :larm)
         (progn
-          (send *pr2* :rarm :angle-vector (cadr *pr2-tuckarm-pose-larm-free*))
+          (send *pr2* :rarm :angle-vector (get-tuckarm :larm side :rarm))
           (send *ri* :rarm-angle-vector (send *pr2* :angle-vector) msec))
       (progn
-        (send *pr2* :larm :angle-vector (car *pr2-tuckarm-pose-rarm-free*))
+        (send *pr2* :larm :angle-vector (get-tuckarm :rarm side :larm))
         (send *ri* :larm-angle-vector (send *pr2* :angle-vector) msec)))
     (send *ri* :wait-interpolation)
     (if (eq free-arm :larm)
         (progn
-          (send *pr2* :larm :angle-vector (car *pr2-tuckarm-pose-larm-free*))
+          (send *pr2* :larm :angle-vector (get-tuckarm :larm side :larm))
           (send *ri* :larm-angle-vector (send *pr2* :angle-vector) msec))
       (progn
-        (send *pr2* :rarm :angle-vector (cadr *pr2-tuckarm-pose-rarm-free*))
+        (send *pr2* :rarm :angle-vector (get-tuckarm :rarm side :rarm))
         (send *ri* :rarm-angle-vector (send *pr2* :angle-vector) msec)))
     (send *ri* :wait-interpolation)
     t
