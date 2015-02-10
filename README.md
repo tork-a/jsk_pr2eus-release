@@ -1,3 +1,26 @@
+## jsk_pr2eus (indigo) - 0.1.7-0
+
+The packages in the `jsk_pr2eus` repository were released into the `indigo` distro by running `/usr/bin/bloom-release jsk_pr2eus --rosdistro indigo --track indigo` on `Tue, 10 Feb 2015 17:13:39 -0000`
+
+These packages were released:
+- `jsk_pr2eus`
+- `pr2eus`
+
+Version of package(s) in repository `jsk_pr2eus`:
+- upstream repository: https://github.com/jsk-ros-pkg/jsk_pr2eus
+- release repository: https://github.com/tork-a/jsk_pr2eus-release.git
+- rosdistro version: `0.1.6-1`
+- old version: `0.1.6-1`
+- new version: `0.1.7-0`
+
+Versions of tools used:
+- bloom version: `0.5.18`
+- catkin_pkg version: `0.2.6`
+- rosdep version: `0.11.1`
+- rosdistro version: `0.4.0`
+- vcstools version: `0.1.36`
+
+
 ## jsk_pr2eus (hydro) - 0.1.7-0
 
 The packages in the `jsk_pr2eus` repository were released into the `hydro` distro by running `/usr/bin/bloom-release jsk_pr2eus --rosdistro hydro --track hydro` on `Tue, 10 Feb 2015 17:09:40 -0000`
