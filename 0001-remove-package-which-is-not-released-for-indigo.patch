@@ -1,15 +1,15 @@
-From fa1e3cf25c0b2fa0edc5450f589018fc45902565 Mon Sep 17 00:00:00 2001
+From 86401fd3425a0683eb7d82f8769267ad10b62b93 Mon Sep 17 00:00:00 2001
 From: Kei Okada <kei.okada@gmail.com>
 Date: Sat, 20 Dec 2014 17:06:01 +0900
 Subject: [PATCH] remove package which is not released for indigo
 
 ---
- catkin.cmake |  2 +-
- package.xml  | 12 ++++++------
+ catkin.cmake |    2 +-
+ package.xml  |   12 ++++++------
  2 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/catkin.cmake b/catkin.cmake
-index 37cbe97..42c07c4 100644
+index c68672f..d31f807 100644
 --- a/catkin.cmake
 +++ b/catkin.cmake
 @@ -10,7 +10,7 @@ if($ENV{ROS_DISTRO} STREQUAL "groovy")
@@ -22,7 +22,7 @@ index 37cbe97..42c07c4 100644
  find_package(catkin REQUIRED COMPONENTS ${pr2eus_catkin_components}
    geneus # this load roseus.cmake, so it needs to be located in the end
 diff --git a/package.xml b/package.xml
-index e993085..834adcb 100644
+index a6e3290..0c0f15c 100644
 --- a/package.xml
 +++ b/package.xml
 @@ -13,9 +13,9 @@
@@ -38,7 +38,7 @@ index e993085..834adcb 100644
    <build_depend>control_msgs</build_depend>
    <build_depend>move_base_msgs</build_depend>
    <build_depend>nav_msgs</build_depend>
-@@ -25,9 +25,9 @@
+@@ -26,9 +26,9 @@
    <run_depend>roseus</run_depend>
    <run_depend>rostest</run_depend>
    <run_depend>euscollada</run_depend>
@@ -52,5 +52,5 @@ index e993085..834adcb 100644
    <run_depend>move_base_msgs</run_depend>
    <run_depend>nav_msgs</run_depend>
 -- 
-1.9.1
+1.7.9.5
 
