@@ -10,7 +10,7 @@ if($ENV{ROS_DISTRO} STREQUAL "groovy")
   execute_process(COMMAND rosrun roseus generate-all-msg-srv.sh sound_play)
   set(ENV{ROS_PACKAGE_PATH} ${_ROS_PACKAGE_PATH})
 else()
-  set(pr2eus_catkin_components ${pr2eus_catkin_components} move_base_msgs sound_play)
+  set(pr2eus_catkin_components ${pr2eus_catkin_components} move_base_msgs pr2_msgs pr2_controllers_msgs sound_play )
 endif()
 find_package(catkin REQUIRED COMPONENTS ${pr2eus_catkin_components}
   roseus # this load roseus.cmake, so it needs to be located in the end
