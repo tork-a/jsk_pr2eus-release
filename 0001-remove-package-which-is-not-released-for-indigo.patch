@@ -1,4 +1,4 @@
-From 86401fd3425a0683eb7d82f8769267ad10b62b93 Mon Sep 17 00:00:00 2001
+From 799ee990d6ced797ccd422dc5ddd2aeb825a59f7 Mon Sep 17 00:00:00 2001
 From: Kei Okada <kei.okada@gmail.com>
 Date: Sat, 20 Dec 2014 17:06:01 +0900
 Subject: [PATCH] remove package which is not released for indigo
@@ -9,20 +9,20 @@ Subject: [PATCH] remove package which is not released for indigo
  2 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/catkin.cmake b/catkin.cmake
-index c68672f..d31f807 100644
+index 3392c19..897dc08 100644
 --- a/catkin.cmake
 +++ b/catkin.cmake
 @@ -10,7 +10,7 @@ if($ENV{ROS_DISTRO} STREQUAL "groovy")
    execute_process(COMMAND rosrun roseus generate-all-msg-srv.sh sound_play)
    set(ENV{ROS_PACKAGE_PATH} ${_ROS_PACKAGE_PATH})
  else()
--  set(pr2eus_catkin_components ${pr2eus_catkin_components} move_base_msgs pr2_msgs pr2_controllers_msgs sound_play)
+-  set(pr2eus_catkin_components ${pr2eus_catkin_components} move_base_msgs pr2_msgs pr2_controllers_msgs sound_play )
 +  set(pr2eus_catkin_components ${pr2eus_catkin_components} move_base_msgs sound_play)
  endif()
  find_package(catkin REQUIRED COMPONENTS ${pr2eus_catkin_components}
-   geneus # this load roseus.cmake, so it needs to be located in the end
+   roseus # this load roseus.cmake, so it needs to be located in the end
 diff --git a/package.xml b/package.xml
-index a6e3290..0c0f15c 100644
+index 2e7e2d4..ba58de3 100644
 --- a/package.xml
 +++ b/package.xml
 @@ -13,9 +13,9 @@
