@@ -1,3 +1,27 @@
+## jsk_pr2eus (hydro) - 0.1.9-0
+
+The packages in the `jsk_pr2eus` repository were released into the `hydro` distro by running `/var/lib/jenkins/send_to_bloom.py jsk-ros-pkg jsk_pr2eus` on `Fri, 03 Apr 2015 08:24:41 -0000`
+
+These packages were released:
+- `jsk_pr2eus`
+- `pr2eus`
+- `pr2eus_moveit`
+
+Version of package(s) in repository `jsk_pr2eus`:
+- upstream repository: https://github.com/jsk-ros-pkg/jsk_pr2eus
+- release repository: https://github.com/tork-a/jsk_pr2eus-release.git
+- rosdistro version: `0.1.8-0`
+- old version: `0.1.8-0`
+- new version: `0.1.9-0`
+
+Versions of tools used:
+- bloom version: `0.5.18`
+- catkin_pkg version: `0.2.2`
+- rosdep version: `0.10.33`
+- rosdistro version: `0.4.0`
+- vcstools version: `0.1.33`
+
+
 ## jsk_pr2eus (indigo) - 0.1.8-0
 
 The packages in the `jsk_pr2eus` repository were released into the `indigo` distro by running `/var/lib/jenkins/send_to_bloom.py jsk-ros-pkg jsk_pr2eus` on `Wed, 25 Feb 2015 12:29:27 -0000`
