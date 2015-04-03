@@ -5,6 +5,7 @@
 (ros::load-ros-manifest "pr2_msgs")
 (ros::load-ros-manifest "rosgraph_msgs")
 (ros::load-ros-manifest "pr2_controllers_msgs")
+(ros::load-ros-manifest "control_msgs")
 ;;(ros::roseus-add-msgs "sensor_msgs") ;; roseus depends on sensor_msgs
 ;;(ros::roseus-add-msgs "visualization_msgs") ;; roseus depends on visualization_msgs
 
@@ -37,7 +38,7 @@
   (:action-feedback-cb (msg)
    (let ((finish-time) (current-time))
      (ros::ros-debug "[~A] feedback-cb ~A" ros::name-space msg)
-     (unless (send ros::comm-state :action-goal) (return-from :action-feedback-cb nil))
+     (unless (and (send ros::comm-state :action-goal) (not (equal (send (class ros::action-spec) :name) 'control_msgs::SingleJointPositionAction))) (return-from :action-feedback-cb nil))
      (setq current-time (send msg :feedback :error :time_from_start)
            finish-time (send (car (last (send (send ros::comm-state :action-goal) :goal :trajectory :points))) :time_from_start))
      (when (string= (send (send ros::comm-state :action-goal) :goal_id :id)
@@ -192,26 +193,71 @@
                      msg))
      msg))
 
+  (:angle-vector-safe
+   (av tm &key (simulation) (yes) (wait t) (norm-threshold 120) (angle-threshold 80) (velocity-threshold 240))
+   (let* ((q (send self :state :potentio-vector))
+          (jlst (send robot :joint-list))
+          (diff-q (v- av q))
+          (qv (scale (/ 1000.0 tm) diff-q))
+          (jqlst (mapcar #'(lambda (ang j) (cons ang (send j :name)))
+                         (coerce diff-q cons) jlst))
+          (jvlst (mapcar #'(lambda (ang j) (cons ang (send j :name)))
+                         (coerce qv cons) jlst))
+          warning)
+     (warn "angle-vector: ~A~%" av)
+     (when (> (norm diff-q) norm-threshold)
+       (setq warning t)
+       (warning-message 1 "WARNING: WARNING: diff angle-vector norm is ~d [deg]~%" (norm diff-q)))
+     (setq jqlst (sort jqlst #'(lambda (x y) (>= (abs (car x)) (abs (car y))))))
+     (setq jqlst (remove-if-not #'(lambda (x) (> (abs (car x)) angle-threshold)) jqlst))
+     (when jqlst
+       (setq warning t)
+       (warning-message 1 "WARNING: WARNING: typical diff angles (diff [deg] . Joint) are ~a~%" jqlst))
+     (setq jvlst (sort jvlst #'(lambda (x y) (>= (abs (car x)) (abs (car y))))))
+     (setq jvlst (remove-if-not #'(lambda (x) (> (abs (car x)) velocity-threshold)) jvlst))
+     (when jvlst
+       (setq warning t)
+       (warning-message 1 "WARNING: WARNING: typical velocities (velocity [deg/sec] . Joint) are ~a~%" jvlst))
+     (when (and (not simulation) (or yes (y-or-n-p "Do you send this angles to the robot ? ")))
+       (warn ";; send angle-vector~%")
+       (send self :angle-vector av tm)
+       (when wait
+         (warn ";; wait interpolation~%")
+         (send self :wait-interpolation))
+       (warn ";; done~%")
+       )
+     warning))
+
   (:angle-vector-duration
-   (start end &optional (scale 5) (min-time 1.0))
-   (let ((joint-list (send robot :joint-list))
-         )
+   (start end &optional (scale 1) (min-time 1.0) (ctype controller-type))
+   (let* ((unordered-joint-names 
+           (flatten (mapcar #'(lambda (joint-param)
+                                (cdr (assoc :joint-names joint-param)))
+                            (send self ctype))))
+          (joint-list (send robot :joint-list)))
      (let ((diff (coerce (v- end start) cons)))
        (let ((time-list (mapcar #'(lambda (d j)
-                                    (* scale (/ (deg2rad (abs d)) (send j :max-joint-velocity))))
+                                    ;; check if j is included in unordered-joint-names
+                                    (if (find (send j :name) unordered-joint-names
+                                              :test #'string=)
+                                        (* scale (/ (if (derivedp j linear-joint) (* 0.001 (abs d)) (deg2rad (abs d)))
+                                                    (send j :max-joint-velocity)))
+                                      0))
                                 diff joint-list)))
          (let ((max-time (apply #'max time-list)))
            (max max-time min-time))))))
-
   (:angle-vector
-   (av &optional (tm nil) (ctype controller-type) (start-time 0) &key (scale 5) (min-time 1.0))
+   (av &optional (tm nil) (ctype controller-type) (start-time 0) &key (scale 1) (min-time 1.0))
    "tm (time to goal in msec)
    if designated tm is faster than fastest speed, use fastest speed
-   if not specified, it will use 1/5 of the fastest speed .
+   if not specified, it will use 1/scale of the fastest speed .
    if :fastest is specefied use fastest speed calcurated from max speed"
-
+   (unless (gethash ctype controller-table)
+     (warn ";; controller-type: ~A not found" ctype)
+     (return-from :angle-vector))
    ;;Check and decide tm
-   (let ((fastest-tm (* 1000 (send self :angle-vector-duration (send self :state :potentio-vector) av scale min-time))))
+   (let ((fastest-tm (* 1000 (send self :angle-vector-duration 
+                                   (send self :state :potentio-vector) av scale min-time ctype))))
      (cond
       ;;Fastest time Mode
       ((equal tm :fast)
@@ -228,7 +274,6 @@
        (ros::ros-error ":angle-vector tm is invalid.  args: ~A" tm)
        (error ":angle-vector tm is invalid. args: ~A" tm)))
      )
-
    ;; for simulation mode
    (when (send self :simulation-modep)
      (if av
@@ -242,9 +287,6 @@
 
    (send robot :angle-vector av)
    (let ((cacts (gethash ctype controller-table)))
-     (unless cacts
-       (warn ";; controller-type: ~A not found" ctype)
-       (return-from :angle-vector))
      (mapcar
       #'(lambda (action param)
           (send self :send-ros-controller
@@ -257,7 +299,10 @@
       cacts (send self ctype)))
    av)
   (:angle-vector-sequence
-   (avs &optional (tms (list 3000)) (ctype controller-type) (start-time 0.1) &key (scale 5) (min-time 1.0))
+   (avs &optional (tms (list 3000)) (ctype controller-type) (start-time 0.1) &key (scale 1) (min-time 0.0))
+   (unless (gethash ctype controller-table)
+     (warn ";; controller-type: ~A not found" ctype)
+     (return-from :angle-vector-sequence))
    (send self :spin-once) ;; for :state :potentio-vector
    (let ((st 0) (traj-points nil)
          (av-prev (send self :state :potentio-vector)) av av-next
@@ -267,7 +312,7 @@
          avs
        (while avs
          (setq av (pop avs))
-         (setq fastest-tm (* 1000 (send self :angle-vector-duration av-prev av scale min-time)))
+         (setq fastest-tm (* 1000 (send self :angle-vector-duration av-prev av scale min-time ctype)))
          (setq tm (pop tms))
          (cond
           ((equal tm :fast)
@@ -282,7 +327,7 @@
          (if (car tms)
              (progn
                (setq tm-next ( car tms))
-               (setq fastest-tm-next (* 1000 (send self :angle-vector-duration av (car avs) scale min-time)))
+               (setq fastest-tm-next (* 1000 (send self :angle-vector-duration av (car avs) scale min-time ctype)))
                (cond
                 ((equal tm-next :fast)
                  (setq tm-next fastest-tm-next))
@@ -424,38 +469,52 @@
 			  joint-names)))
      (send goal :header :seq 1)
      (send goal :header :stamp st)
-     (send goal :goal :trajectory :joint_names joint-names)
-     (send goal :goal :trajectory :header :stamp st)
-     (dolist (trajpt trajpoints)
-       (let* ((all-positions (elt trajpt 0))
-	      (all-velocities (elt trajpt 1))
-	      (duration (elt trajpt 2))
-	      (positions (instantiate float-vector (length joint-names)))
-	      (velocities (instantiate float-vector (length joint-names))))
-	 (dotimes (i (length joints))
-	   (let* ((joint (elt joints i))
-		  (id (position joint (send robot :joint-list)))
-		  p v)
-	     (setq p (elt all-positions id)
-		   v (elt all-velocities id))
-	     (cond
-	      ((derivedp joint rotational-joint)
-	       (setq p (deg2rad p))
-	       (setq v (deg2rad v)))
-	      (t
-	       (setq p (* 0.001 p))
-	       (setq v (* 0.001 v))))
-	     (setf (elt positions i) p)
-	     (setf (elt velocities i) v)))
-	 (push (instance trajectory_msgs::JointTrajectoryPoint
-			 :init
-			 :positions positions
-			 :velocities velocities
-			 :time_from_start (ros::time duration))
-	       goal-points)
-	 ))
-     (send self :spin-once)
-     (send goal :goal :trajectory :points goal-points)
+
+     (cond
+      ((equal (class goal) control_msgs::SingleJointPositionActionGoal)
+       (let* ((joint (car joints))
+	      (id (position joint (send robot :joint-list)))
+	      (pos (deg2rad (elt (elt (car trajpoints) 0) id)))
+	      )
+	 (send goal :goal :position pos)
+	 (send goal :goal :max_velocity 5)
+	 (send self :spin-once)
+	 )
+       )
+      (t
+       (send goal :goal :trajectory :joint_names joint-names)
+       (send goal :goal :trajectory :header :stamp st)
+       (dolist (trajpt trajpoints)
+	 (let* ((all-positions (elt trajpt 0))
+		(all-velocities (elt trajpt 1))
+		(duration (elt trajpt 2))
+		(positions (instantiate float-vector (length joint-names)))
+		(velocities (instantiate float-vector (length joint-names))))
+	   (dotimes (i (length joints))
+	     (let* ((joint (elt joints i))
+		    (id (position joint (send robot :joint-list)))
+		    p v)
+	       (setq p (elt all-positions id)
+		     v (elt all-velocities id))
+	       (cond
+		((derivedp joint rotational-joint)
+		 (setq p (deg2rad p))
+		 (setq v (deg2rad v)))
+		(t
+		 (setq p (* 0.001 p))
+		 (setq v (* 0.001 v))))
+	       (setf (elt positions i) p)
+	       (setf (elt velocities i) v)))
+	   (push (instance trajectory_msgs::JointTrajectoryPoint
+			   :init
+			   :positions positions
+			   :velocities velocities
+			   :time_from_start (ros::time duration))
+		 goal-points)
+	   ))
+       (send self :spin-once)
+       (send goal :goal :trajectory :points goal-points)
+       ))
      (send action :send-goal goal)
      ))
   ;;
@@ -818,6 +877,26 @@
      (send self :angle-vector (send self :robot :angle-vector) time)
      (send self :wait-interpolation)
      )
+   )
+  (:eus-mannequin-mode
+   (tmp-robot limb &key ((:time tm) 1000) ((:viewer vwr) *viewer*))
+   "Euslisp version mannequin mode.
+    In every loop, :angle-vector is continuously updated.
+    If you want to stop this mode, press Enter.
+    tmp-robot is argument for robot instance and angle-vector of tmp-robot is updated in this method.
+    limb is mannequin mode limb such as :rarm, :larm, :rleg, and :lleg.
+    tm is angle-vector update time [ms]. 1000 by default."
+   (objects (list tmp-robot))
+   (warn ";; Start Euslisp mannequin mode.~%")
+   (warn ";; To stop this mode, press Enter.~%")
+   (do-until-key
+    (send self :state)
+    (send tmp-robot limb :angle-vector (send robot limb :angle-vector))
+    (send vwr :draw-objects)
+    (send self :angle-vector (send tmp-robot :angle-vector) tm)
+    (send self :wait-interpolation)
+    )
+   (warn ";; Stop Euslisp mannequin mode.~%")
    )
   )
 ;;
