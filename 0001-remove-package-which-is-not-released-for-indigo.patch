@@ -1,4 +1,4 @@
-From cd685b54f7d3b5a31174ec34a02d4f0e9a2f60a4 Mon Sep 17 00:00:00 2001
+From 807ca94115acd394d6f57f1d9dce93439248afab Mon Sep 17 00:00:00 2001
 From: Kei Okada <kei.okada@gmail.com>
 Date: Sat, 20 Dec 2014 17:06:01 +0900
 Subject: [PATCH] remove package which is not released for indigo
@@ -22,7 +22,7 @@ index 9b657b2..d07fe6c 100644
  find_package(catkin REQUIRED COMPONENTS ${pr2eus_catkin_components}
    roseus # this load roseus.cmake, so it needs to be located in the end
 diff --git a/package.xml b/package.xml
-index 5521bc5..378048f 100644
+index 7dd31d7..197ecd1 100644
 --- a/package.xml
 +++ b/package.xml
 @@ -13,9 +13,9 @@
