@@ -26,7 +26,13 @@
 (deftest test-wait-interpolation
   (assert (send *robot* :reset-pose))
   (assert (send *ri* :angle-vector (send *robot* :angle-vector) 2000))
-  (assert (null (send *ri* :wait-interpolation)))
+  (assert (null (some #'identity (send *ri* :wait-interpolation))))
+  )
+
+(deftest test-wait-interpolation-smooth
+  (assert (send *robot* :reset-pose))
+  (assert (send *ri* :angle-vector (send *robot* :angle-vector) 2000))
+  (assert (null (some #'identity (send *ri* :wait-interpolation-smooth 1000))))
   )
 
 (deftest test-state
@@ -36,7 +42,7 @@
 (deftest test-potentio-vector
   (assert (send *robot* :reset-pose))
   (assert (send *ri* :angle-vector (send *robot* :angle-vector) 2000))
-  (assert (null (send *ri* :wait-interpolation)))
+  (assert (null (some #'identity (send *ri* :wait-interpolation))))
   (assert (< (norm (v- (send *robot* :angle-vector) (send *ri* :potentio-vector))) 10.0))
   )
 
@@ -44,6 +50,26 @@
   (assert (send *ri* :worldcoords))
   )
 
+(deftest test-objects
+  (load "models/room610-scene.l")
+  (room610)
+  (setq *ri* (instance sample-robot-interface :init :objects (send *room610* :objects)))
+  (assert (send *ri* :objects) "robot-interface :objects")
+  (setq *laundry* (send *room610* :object "room610-laundry-machine"))
+  (assert (string= (send (car (send *ri* :find-object "room610-laundry-machine")) :name)
+                   (send *laundry* :name))
+          "robot-interface :find-object by name")
+  (assert (string= (send (car (send *ri* :find-object *laundry*)) :name)
+                   (send *laundry* :name))
+          "robot-interface :find-object by object of same name")
+  )
+
+;; this should be run in the last
+(deftest test-objects-no-display
+  (setq x::*display* nil)
+  (setq *ri* (instance sample-robot-interface :init :objects (send *room610* :objects)))
+  (assert (send *ri* :objects) "robot-interface :objects")
+  )
 
 (run-all-tests)
 (exit)
