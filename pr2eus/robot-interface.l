@@ -27,9 +27,12 @@
 
 (defclass controller-action-client
   :super ros::simple-action-client
-  :slots (time-to-finish))
+  :slots (time-to-finish
+          ri angle-vector-sequence timer-sequence current-time current-angle-vector previous-angle-vector scale-angle-vector;; slot for angle-vector-sequence
+          ))
 (defmethod controller-action-client
-  (:init (&rest args)
+  (:init (r &rest args)
+    (setq ri r) ;; robot-interface
     (setq time-to-finish 0)
     (send-super* :init args))
   (:time-to-finish ()
@@ -45,6 +48,27 @@
                     (send msg :status :goal_id :id))
        (setq time-to-finish (send (ros::time- finish-time current-time) :to-sec)))
      ))
+  ;; method for simulatio-modep
+  (:push-angle-vector-simulation (av tm &optional prev-av)
+   (setq previous-angle-vector prev-av)
+   (setq angle-vector-sequence (append angle-vector-sequence (list av)))
+   (setq timer-sequence (append timer-sequence (list tm)))
+   (setq current-time 0)
+   av)
+  (:pop-angle-vector-simulation ()
+    (let ((av (car angle-vector-sequence)) (tm (car timer-sequence)) scale-av)
+      (when tm
+        (setq scale-av (send ri :sub-angle-vector av previous-angle-vector))
+        (setq av (v+ previous-angle-vector (scale (/ current-time tm) scale-av)))
+        (incf current-time 100.0)
+        (when (> current-time tm)
+          (pop timer-sequence)
+          (pop angle-vector-sequence)
+          (setq previous-angle-vector av)
+          (setq current-time 0)
+          )
+        av)))
+  (:interpolatingp () (not (null timer-sequence)))
   )
 
 (defclass robot-interface
@@ -136,14 +160,17 @@
            (setq viewer (instance x::irtviewer :create :title (format nil "~A Kinematics Simulator" (send robot :name)) :view-name (send robot :name) :draw-floor t)))
          (send viewer :objects (list robot))
          (send self :draw-objects)
-         (send self :objects objs)
          (if old-viewer (setq user::*viewer* old-viewer)))
+       (send self :objects objs)
        (ros::advertise (cond
                         (pub-joint-states-topic pub-joint-states-topic)
                         (namespace
                          (format nil "~A/~A" namespace joint-states-topic))
                         (t joint-states-topic))
                        sensor_msgs::JointState)
+       (setq *top-selector-interval* 0.01)
+       (pushnew `(lambda () (send ,self :robot-interface-simulation-callback)) *timer-job*) ;; FIXME need to remove old one
+       (print *timer-job*)
        ))
    self)
   ;;
@@ -155,7 +182,7 @@
         #'(lambda (param)
             (let* ((controller-action (cdr (assoc :controller-action param)))
                    (action-type (cdr (assoc :action-type param)))
-                   (action (instance controller-action-client :init
+                   (action (instance controller-action-client :init self
                                      (if namespace (format nil "~A/~A" namespace controller-action)
                                        controller-action) action-type
                                        :groupname groupname)))
@@ -199,6 +226,29 @@
      tmp-actions
      ))
   ;;
+  (:robot-interface-simulation-callback ()
+   (let* ((joint-list (send robot :joint-list))
+          (all-joint-names (send-all joint-list :name)))
+     (send self :publish-joint-state)
+     ;(print (list 'actions controller-actions))
+     ;(print controller-type)
+     ;(print controller-table)
+     ;(maphash #'(lambda (x y)(print (list x y))) controller-table)
+     (dolist (param (send self controller-type)) ;; assuming all action is stored in controller-type (:default-controller)
+       ;(print (list 'p param))
+       (let* ((joint-names (cdr (assoc :joint-names param)))
+              (action-name (cdr (assoc :controller-action param)))
+              (action-client (find action-name controller-actions :key #'(lambda (x) (send x :name)) :test #'string=))
+              (av (send action-client :pop-angle-vector-simulation))
+              )
+         (when av
+           (dolist (j joint-names)
+             (if (find j all-joint-names :test #'string=)
+                 (let ((i (position j all-joint-names :test #'string=)))
+                   (send (elt joint-list i) :joint-angle (elt av i))))))
+         )) ;;
+     (if viewer (send self :draw-objects))
+     ))
   (:publish-joint-state ;; for simulation mode (joint-action-enable is nil)
    (&optional (joint-list (send robot :joint-list)))
    (let (msg names positions velocities efforts)
@@ -269,20 +319,8 @@
            (max max-time min-time))))))
   (:angle-vector-simulation
    (av tm ctype)
-   (let* ((prev-av (send robot :angle-vector))
-          (scale-av (send self :sub-angle-vector av prev-av))
-          (joint-names (flatten (mapcar #'(lambda (c) (cdr (assoc :joint-names c)))(send self ctype))))
-          (joint-ids (remove nil (mapcar #'(lambda (joint-name) (position joint-name (send robot :joint-list) :test #'(lambda (n j) (equal n (send j :name))))) joint-names)))
-          curr-av next-av)
-     (do ((curr-tm 0.0 (+ curr-tm 100.0)))
-         ((>= curr-tm tm))
-           (setq curr-av (send robot :angle-vector))
-           (setq next-av (v+ prev-av (scale (/ curr-tm tm) scale-av)))
-           (dolist (id joint-ids)
-             (setf (elt curr-av id) (elt next-av id)))
-	   (send robot :angle-vector curr-av)
-	   (send self :publish-joint-state)
-	   (if viewer (send self :draw-objects)))))
+   (let* ((prev-av (send robot :angle-vector)))
+     (send-all (gethash ctype controller-table) :push-angle-vector-simulation av tm prev-av)))
   (:angle-vector
    (av &optional (tm nil) (ctype controller-type) (start-time 0) &key (scale 1) (min-time 1.0))
    "Send joind angle to robot, this method retuns immediately, so use :wait-interpolation to block until the motion stops.
@@ -348,8 +386,12 @@
          tm tm-next fastest-tm
          (vel (instantiate float-vector (length (car avs)))))
      (if (atom tms) (setq tms (make-list (length avs) :initial-element tms)))
-     (if (< (length tms) (length avs))
-         (setq tms (append tms (make-list (- (length avs) (length tms)) :initial-element (car (last tms))))))
+     (cond
+      ((< (length tms) (length avs))
+         (nconc tms (make-list (- (length avs) (length tms)) :initial-element (car (last tms)))))
+      ((> (length tms) (length avs))
+       (ros::ros-warn "length of tms should be the same or smaller than avs")
+       (setq tms (subseq tms 0 (length avs)))))
      (prog1 ;; angle-vector-sequence returns avs
          avs
        (while avs
@@ -399,16 +441,17 @@
            (send self :angle-vector-simulation av tm ctype))
          ;;
          ;; update only joints with in current controller instaed of (send robot :angle-vector av)
-         (let* ((joint-names (flatten (mapcar #'(lambda (c) (cdr (assoc :joint-names c))) (send self ctype))))
+         (unless (send self :simulation-modep)
+           (let* ((joint-names (flatten (mapcar #'(lambda (c) (cdr (assoc :joint-names c))) (send self ctype))))
                 (joint-ids (mapcar #'(lambda (joint-name) (position joint-name (send robot :joint-list) :test #'(lambda (n j) (equal n (send j :name))))) joint-names)))
            (mapcar #'(lambda (name id)
                        (if (and (send robot :joint name) id (> (length av) id))
                            (send (send robot :joint name) :joint-angle (elt av id))
                          (warning-message 3 "[robot-interface.l] (angle-vector-sequence) could not find joint-name '~A' (~A) or joint-id ~A (av length ~A)~%" name (send robot :joint name) id (length av))))
-                   joint-names joint-ids))
-	 (when (send self :simulation-modep)
-	   (send self :publish-joint-state)
-	   (if viewer (send self :draw-objects)))
+                   joint-names joint-ids)))
+;	 (when (send self :simulation-modep)
+;	   (send self :publish-joint-state)
+;	   (if viewer (send self :draw-objects)))
          (push (list av
                      (copy-seq vel)  ;; velocities
                      (/ (+ st tm) 1000.0)) ;; tm + duration
@@ -431,16 +474,20 @@
   (:wait-interpolation (&optional (ctype) (timeout 0)) ;; controller-type
    "Wait until last sent motion is finished
 - ctype : controller to be wait
-- timeout : max time of for waiting"
+- timeout : max time of for waiting
+- return values is a list of interpolatingp for all controllers, so (null (some #'identity (send *ri* :wait-interpolation))) -> t if all interpolation has stopped"
    (when (send self :simulation-modep)
-     (return-from :wait-interpolation nil))
+     (while (some #'(lambda (a) (send a :interpolatingp)) controller-actions)
+       (send self :robot-interface-simulation-callback))
+     (return-from :wait-interpolation (send-all controller-actions :interpolatingp)))
    (cond
     (ctype
      (let ((cacts (gethash ctype controller-table)))
        (send-all cacts :wait-for-result :timeout timeout)))
     (t (send-all controller-actions :wait-for-result :timeout timeout))))
   (:interpolatingp (&optional (ctype)) ;; controller-type ;; check someone is moving
-"Check inf the last sent motion is executing"
+"Check if the last sent motion is executing
+return t if interpolating"
     (send self :spin-once)
     (cond
      (ctype
@@ -454,13 +501,13 @@
 	(dolist (av (list av1 av2 av3 av4))
 	    (send *ri* :angle-vector av)
 	    (send *ri* :wait-interpolation-smooth 300))
-"
+Return value is a list of interpolatingp for all controllers, so (null (some #'identity (send *ri* :wait-interpolation))) -> t if all interpolation has stopped"
     (while (null (send self :interpolating-smoothp time-to-finish ctype))
       (send self :ros-wait 0.005)))
   (:interpolating-smoothp (time-to-finish &optional (ctype)) ;; controller-type
 "Check inf the last sent motion will stops for next time-to-finish [msec]"
    (when (send self :simulation-modep)
-     (return-from :wait-interpolation nil))
+     (return-from :interpolating-smoothp t))
    (send self :spin-once)
    (every #'(lambda (x) (< x (/ time-to-finish 1000.0)))
           (cond
@@ -736,6 +783,11 @@
      (send viewer :look-all (send (geo::make-bounding-box (flatten (send-all (x::draw-things robot) :vertices))) :grow 0.3))
      (send viewer :draw-objects)
      (x::window-main-one)))
+  (:find-object (name-or-obj) "Returns objects with given name or object of the same name."
+   (let ((name (if (derivedp name-or-obj cascaded-link) (send name-or-obj :name) name-or-obj)))
+     (append
+      (mapcan #'(lambda (x) (if (derivedp x scene-model) (send x :find-object name) nil)) objects)
+      (mapcan #'(lambda (x) (if (string= name (send x :name)) (list x))) objects))))
   ;;
   (:joint-action-enable (&optional (e :dummy)) (if (not (eq e :dummy)) (setq joint-action-enable e)) joint-action-enable)
   (:simulation-modep () "Check if simulation mode" (null joint-action-enable))
@@ -816,6 +868,33 @@
        (if spin-self (send self :spin-once))
        (ros::sleep)))
    t)
+  ;;
+  (:go-pos
+   (x y &optional (d 0)) ;; [m] [m] [degree]
+   "move robot toward x, y, degree and wait to reach that goal. return t if reached or nil if fail
+    the robot moves relative to current position.
+    using [m] and [degree] is historical reason from original hrpsys code"
+   (error "subclass's responsibility for (send ~s :go-pos)~%" self))
+  (:go-pos-no-wait
+   (x y &optional (d 0)) ;; [m] [m] [degree]
+   "no-wait version of :go-pos. this function is always assumed to return t"
+   (error "subclass's responsibility for (send ~s :go-pos-no-wait)~%" self))
+  (:go-wait
+   ()
+   "wait until :go-pos-no-wait reached to the goal, return t if reached or nil if fail"
+   (error "subclass's responsibility for (send ~s :go-wait)~%" self))
+  (:go-velocity
+   (x y d ;; [m/sec] [m/sec] [rad/sec]
+    &optional (msec 1000) ;; msec is total animation time [msec]
+    &key (stop t) (wait))
+   "move robot at given speed for given msec.
+    if stop is t, robot stops after msec, use wait t for blocking call
+    return nil if aborted while waiting by enabling :wait, otherwise return t"
+   (error "subclass's responsibility for (send ~s :go-velocity)~%" self))
+  (:go-stop
+   ()
+   "stop go-velocity. return t if robot successfly stops, otherwise return nil"
+   (error "subclass's responsibility for (send ~s :stop)~%" self))
   ) ;; robot-interface
 ;; ros visualization methods
 (defmethod robot-interface
