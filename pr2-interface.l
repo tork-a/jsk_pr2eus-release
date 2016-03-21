@@ -49,8 +49,6 @@
    ;;
    (ros::advertise "j_robotsound" sound_play::SoundRequest 5)
    ;;
-   (ros::subscribe "/base_odometry/odom" nav_msgs::Odometry
-                   #'send self :pr2-odom-callback :groupname groupname)
    (ros::subscribe "/pressure/r_gripper_motor" pr2_msgs::PressureState
                    #'send self :pr2-fingertip-callback :rarm-pressure :groupname groupname)
    (ros::subscribe "/pressure/l_gripper_motor" pr2_msgs::PressureState
@@ -76,18 +74,6 @@
        (ros::ros-warn "~A is not respond, pr2-interface is disabled" action)
        (return)))
    t)
-  ;;
-  (:pr2-odom-callback
-   (msg)
-   (let ((parsed
-	  (list
-	   (cons :stamp (send msg :header :stamp))
-	   (cons :pose (ros::tf-pose->coords (send msg :pose :pose)))
-	   (cons :velocity (float-vector
-			    (* 1000 (send msg :twist :twist :linear :x))
-			    (* 1000 (send msg :twist :twist :linear :y))
-			    (send msg :twist :twist :angular :z))))))
-     (send self :set-robot-state1 :odom parsed)))
   ;;
   (:state (&rest args) ;; overwrite for jsk_maps/pr2
    (case (car args)
@@ -592,23 +578,6 @@ Example: (send self :gripper :rarm :position) => 0.00"
     (send *pr2* :reset-pose)
     (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
     (send *ri* :wait-interpolation)
-    ))
-
-;;
-;; navigation-client.l
-;;
-
-;; reset local costmap and clear unknown grid around robot
-(defun clear-costmap ()
-  (call-empty-service "/move_base_node/clear_costmaps"))
-
-;; change inflation range of local costmap
-(defun change-inflation-range (&optional (range 0.2))
-  (let ((req (instance dynamic_reconfigure::ReconfigureRequest :init)))
-    (send req :config :doubles
-	  (list (instance dynamic_reconfigure::DoubleParameter :init
-			  :name "inflation_radius" :value range)))
-    (ros::service-call "/move_base_node/local_costmap/inflation/set_parameters" req)
     ))
 
 ;; do not use tilt laser
