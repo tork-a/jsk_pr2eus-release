@@ -1,0 +1,25 @@
+From 41bf098b1667cca98f436c7fcc8708b9a22946c2 Mon Sep 17 00:00:00 2001
+From: Kei Okada <kei.okada@gmail.com>
+Date: Sun, 22 May 2016 23:14:10 +0900
+Subject: [PATCH] roseus_tutorials is not released on jade
+
+---
+ package.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/package.xml b/package.xml
+index be72d60..f65a7c4 100644
+--- a/package.xml
++++ b/package.xml
+@@ -20,7 +20,7 @@
+ 
+   <!-- Dependencies needed after this package is compiled. -->
+   <run_depend>pr2eus</run_depend>
+-  <run_depend>roseus_tutorials</run_depend>
++  <!-- <run_depend>roseus_tutorials</run_depend> -->
+   <run_depend>jsk_pcl_ros</run_depend>
+ 
+   <!-- Dependencies needed only for running tests. -->
+-- 
+1.9.1
+
