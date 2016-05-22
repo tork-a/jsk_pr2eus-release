@@ -125,18 +125,25 @@
    (setq visualization-topic vmt)
    (ros::advertise visualization-topic visualization_msgs::MarkerArray 100)
    ;;
-   (when (ros::get-param "use_sim_time" nil)
-     (ros::subscribe "/clock" rosgraph_msgs::Clock #'(lambda (msg)))
-     (ros::ros-warn "/use_sim_time is TRUE, check if /clock is pusblished or not")
-     (let ((cntr 0))
-       (while (and (= (ros::get-num-publishers "/clock") 0)
-                   (<= cntr 10))
-         (unix::usleep (* 100 1000)) ;; 100ms
-         (incf cntr)))
-     (when (= (ros::get-num-publishers "/clock") 0)
-       (ros::ros-error "/use_sim_time is TRUE and /clock is NOT PUBLISHED")
-       (exit 1))
-     (ros::unsubscribe "/clock"))
+   (let ((start-time (now))
+         (ros-now (ros::time-now))
+         (wait-seconds 180)
+         diff-time)
+     (when (and (ros::get-param "use_sim_time" nil)
+                (= 0 (send ros-now :sec))
+                (= 0 (send ros-now :nsec)))
+       (ros::ros-debug "[~A] /use_sim_time is TRUE, check if /clock is pusblished" (ros::get-name))
+       (while (and (= 0 (send ros-now :sec)) (= 0 (send ros-now :nsec)))
+         (setq diff-time (send (now) :subtract start-time))
+         (unix:usleep (* 500 1000))
+         (when (> (send diff-time :second) wait-seconds)
+           (ros::ros-fatal "[~A] /use_sim_time is TRUE but /clock is NOT PUBLISHED" (ros::get-name))
+           (ros::ros-fatal "[~A] ~d seconds elapsed. aborting..." (ros::get-name) wait-seconds)
+           (exit 1))
+         (ros::ros-warn "[~A] waiting /clock... ~d seconds elapsed." (ros::get-name)
+                        (+ (send diff-time :second) (* 1e-6 (send diff-time :micro))))
+         (setq ros-now (ros::time-now)))
+       (ros::ros-info "[~A] /clock is now published." (ros::get-name))))
 
    (cond
     (use-tf2
@@ -1675,5 +1682,46 @@ send-action [ send message to action server, it means robot will move ]"
                           :name "inflation_radius" :value range)))
     (ros::service-call (format nil "~A/~A/~A/set_parameters" node-name costmap-name inflation-name) req)
     ))
+
+;;
+;; robot-init
+;;
+(defun robot-init (&optional (robot-name (ros::get-param "/robot/type")))
+  "Initialize robot-model and robot-interface instances respectively, such as *pr2* and *ri*.
+   Behavior:
+     1. Without /robot/type and argument, or no interface file is found, robot instance and interface instance are not created and errors are invoked.
+     2. If argument are specified and robot interface file is found, robot instance and interface with given name are created.
+     3. If no argument is specified, /robot/type ROSPARAM is set, and robot interface file is found, robot instance and interface with given name are created.
+   Typical usage:
+     (robot-init) ;; With setting /robot/type ROSPARAM anywhere.
+     (robot-init (or (ros::get-param \"/robot/type\") \"pr2\")) ;; If /robot/type ROSPARAM is specified, use it. Otherwise, use \"pr2\" by default.
+   Configuring user-defined robot:
+     This function searches robot interface file from rospack plugins.
+     If user want to use their own robots from robot-init function,
+     please write export tag in [user_defined_rospackage]/package.xml as pr2eus/package.xml.
+   "
+  (let* (;; Check existence ros::rospack-plugins for robot-name-list and interface-file-list.
+         ;;    For example, old deb environment before ros::rospack-plugins is committed.
+         (robot-name-list
+          (if (fboundp 'ros::rospack-plugins)
+              (mapcar #'cdr (ros::rospack-plugins "pr2eus" "robot-name"))
+            (piped-fork-returns-list "rospack plugins --attrib=robot-name pr2eus | cut -d\\  -f2")))
+         (interface-file-list
+          (if (fboundp 'ros::rospack-plugins)
+              (mapcar #'cdr (ros::rospack-plugins "pr2eus" "interface-file"))
+            (piped-fork-returns-list "rospack plugins --attrib=interface-file pr2eus | cut -d\\  -f2")))
+         (robot-name-interface-file-list
+          (assoc robot-name (mapcar #'(lambda (x y) (list x y))
+                                    robot-name-list interface-file-list)
+                 :test #'string=)))
+    (cond
+     ((or (not robot-name-interface-file-list)
+          (not (probe-file (cadr robot-name-interface-file-list))))
+      (error ";; No such robot interface setting are defined ~A, or interface file found ~A!!~%" robot-name (cadr robot-name-interface-file-list))
+      nil)
+     (t
+      (require (cadr robot-name-interface-file-list))
+      (funcall (eval (read-from-string (format nil "#'~A-init" robot-name))))
+      ))))
 
 (provide :robot-interface "robot-interface.l")
