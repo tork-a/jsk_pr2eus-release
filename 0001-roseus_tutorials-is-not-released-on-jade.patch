@@ -1,14 +1,14 @@
-From baebadce5b5f8dd191a5815877112b1f502a9af4 Mon Sep 17 00:00:00 2001
+From 467e66f4b58bc66af3e5b250e132c48081ce7139 Mon Sep 17 00:00:00 2001
 From: Kei Okada <kei.okada@gmail.com>
 Date: Sun, 22 May 2016 23:14:10 +0900
 Subject: [PATCH] roseus_tutorials is not released on jade
 
 ---
- package.xml |    2 +-
+ package.xml | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/package.xml b/package.xml
-index f64346a..762584b 100644
+index 9078525..7424176 100644
 --- a/package.xml
 +++ b/package.xml
 @@ -20,7 +20,7 @@
@@ -21,5 +21,5 @@ index f64346a..762584b 100644
  
    <!-- Dependencies needed only for running tests. -->
 -- 
-1.7.9.5
+1.9.0
 
