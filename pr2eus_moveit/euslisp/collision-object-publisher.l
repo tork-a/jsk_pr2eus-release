@@ -39,7 +39,7 @@
      (ros::publish attached-topicname msg)
      obj))
   (:make-object
-   (obj &key (frame-id "base_footprint") (object-frame-id) (relative-pose)
+   (obj &key (frame-id "base_footprint") (relative-pose)
         (object-id (string (gensym "COLOBJ"))) &allow-other-keys)
    (let ((msg (gethash obj object-list)))
      (when msg (return-from :make-object msg)))
@@ -101,7 +101,6 @@
        (let ((org-cds (send obj :copy-worldcoords)))
          (send obj :reset-coords)
          (send obj :worldcoords)
-         (send-all (send obj :bodies) :worldcoords)
          (let ((fs (body-to-faces obj))
                (geom (instance shape_msgs::mesh :init))
                idx-lst vertices (cntr 0))
@@ -160,6 +159,7 @@
   (:clear-all ()
    (dolist (obj (send object-list :list-keys))
      (send self :delete-object obj))
+   (setq object-list (make-hash-table))
    t)
   (:clear-attached-all ()
    (dolist (obj (send attached-object-list :list-keys))
@@ -167,6 +167,9 @@
    (setq attached-object-list (make-hash-table))
    t)
   (:wipe-all ()
+    (send self :wipe-all-attached-object)
+    (send self :wipe-all-object))
+  (:wipe-all-object ()
    (let ((scene (get-planning-scene :scene-service scene-srv
                                     :components (+ moveit_msgs::PlanningSceneComponents::*ROBOT_STATE_ATTACHED_OBJECTS*
                                                    moveit_msgs::PlanningSceneComponents::*WORLD_OBJECT_NAMES*
@@ -177,11 +180,19 @@
          (send msg :header :stamp (ros::time-now))
          (send msg :operation moveit_msgs::CollisionObject::*REMOVE*)
          (ros::publish topicname msg))
+       (setq object-list (make-hash-table))
+       t)))
+  (:wipe-all-attached-object ()
+   (let ((scene (get-planning-scene :scene-service scene-srv
+                                    :components (+ moveit_msgs::PlanningSceneComponents::*ROBOT_STATE_ATTACHED_OBJECTS*
+                                                   moveit_msgs::PlanningSceneComponents::*WORLD_OBJECT_NAMES*
+                                                   moveit_msgs::PlanningSceneComponents::*WORLD_OBJECT_GEOMETRY*
+                                                   moveit_msgs::PlanningSceneComponents::*OCTOMAP*))))
+     (when scene
        (dolist (msg (send scene :robot_state :attached_collision_objects))
          (send msg :object :header :stamp (ros::time-now))
          (send msg :object :operation moveit_msgs::CollisionObject::*REMOVE*)
          (ros::publish attached-topicname msg))
-       (setq object-list (make-hash-table))
        (setq attached-object-list (make-hash-table))
        t)))
   (:delete-object (obj)
