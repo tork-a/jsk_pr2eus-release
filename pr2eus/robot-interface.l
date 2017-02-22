@@ -215,6 +215,8 @@
            (ros::ros-warn "Waiting for actionlib interface forever because controler-timeout is nil"))
          (unless (and joint-action-enable (send action :wait-for-server controller-timeout))
            (ros::ros-warn "~A is not respond, ~A-interface is disabled" action (send robot :name))
+           (ros::ros-warn "~C[3~CmStarting 'Kinematics Simulator'~C[0m" #x1b 49 #x1b)
+           (ros::ros-warn "~C[3~Cm (If you do not intend to start Kinematics Simulator, make sure that you can run 'rostopic echo /~A/goal' and 'rostopic info /~A/goal')~C[0m" #x1b 52 (send action :name) (send action :name) #x1b)
            (when joint-enable-check
              (setq joint-action-enable nil)
              (return))))
@@ -343,7 +345,7 @@
    (let* ((prev-av (send robot :angle-vector)))
      (send-all (gethash ctype controller-table) :push-angle-vector-simulation av tm prev-av)))
   (:angle-vector
-   (av &optional (tm nil) (ctype controller-type) (start-time 0) &key (scale 1) (min-time 1.0))
+   (av &optional (tm nil) (ctype controller-type) (start-time 0) &key (scale 1) (min-time 1.0) (end-coords-interpolation nil))
    "Send joind angle to robot, this method retuns immediately, so use :wait-interpolation to block until the motion stops.
 - av : joint angle vector [rad]
 - tm : (time to goal in [msec])
@@ -354,7 +356,10 @@
 - start-time : time to start moving
 - scale : if tm is not specified, it will use 1/scale of the fastest speed
 - min-time : minimum time to for time to goal
+- end-coords-interpolation : set t if you want to move robot in cartesian space interpolation
 "
+   (if end-coords-interpolation
+     (return-from :angle-vector (send self :angle-vector-sequence (list av) (list tm) ctype start-time :scale scale :min-time min-time :end-coords-interpolation t)))
    (setq ctype (or ctype controller-type))  ;; use default controller-type if ctype is nil
    (unless (gethash ctype controller-table)
      (warn ";; controller-type: ~A not found" ctype)
@@ -395,7 +400,7 @@
       cacts (send self ctype)))
    av)
   (:angle-vector-sequence
-   (avs &optional (tms (list 3000)) (ctype controller-type) (start-time 0.1) &key (scale 1) (min-time 0.0))
+   (avs &optional (tms (list 3000)) (ctype controller-type) (start-time 0.1) &key (scale 1) (min-time 0.0) (end-coords-interpolation nil))
    "Send joind angle to robot, this method retuns immediately, so use :wait-interpolation to block until the motion stops."
    (setq ctype (or ctype controller-type))  ;; use default controller-type if ctype is nil
    (unless (gethash ctype controller-table)
@@ -413,6 +418,66 @@
       ((> (length tms) (length avs))
        (ros::ros-warn "length of tms should be the same or smaller than avs")
        (setq tms (subseq tms 0 (length avs)))))
+     (when end-coords-interpolation ;; set end-coords interpolation
+       (let ((av-orig (send robot :angle-vector)) ;; initial av, restore at end
+             (c-orig  (send robot :copy-worldcoords)) ;; inital coords, restore at end
+             (av-prev-orig av-prev) ;; prev-av
+             (limbs '(:larm :rarm :lleg :rleg :torso :head)) ;; defined in https://github.com/euslisp/jskeus/blob/master/irteus/irtrobot.l#L79
+             target-limbs
+             (minjerk (instance minjerk-interpolator :init))
+             end-coords-prev end-coords-current ec-prev ec-current
+             interpolated-avs interpolated-tms
+             tm i p (ret t)) ;; if nil failed to interpolate
+           ;; set prev-av
+         (send robot :angle-vector av-prev)
+         (setq end-coords-prev (mapcar #'(lambda (limb) (send robot limb :end-coords :copy-worldcoords)) limbs))
+         ;; choose moved end-coords
+         (setq i 0)
+         (dolist (av avs)
+           (send robot :angle-vector av)
+           (setq end-coords-current (mapcar #'(lambda (limb) (send robot limb :end-coords :copy-worldcoords)) limbs))
+           (setq target-limbs nil)
+           (dotimes (l (length limbs))
+             (setq ec-prev (elt end-coords-prev l) ec-current (elt end-coords-current l))
+             (when (and ec-prev ec-current
+                        (or (> (norm (send ec-prev :difference-position ec-current)) 1)
+                            (> (norm (send ec-prev :difference-rotation ec-current)) (deg2rad 1))))
+               (push (elt limbs l) target-limbs)))
+           (send minjerk :reset :position-list (list #f(0) #f(1)) :time-list (list (elt tms i)))
+           (send robot :angle-vector av-prev)
+           (if target-limbs
+               (progn
+                 (send minjerk :start-interpolation)
+                 (while (send minjerk :interpolatingp)
+                   (send minjerk :pass-time 100)
+                   (setq p (elt (send minjerk :position) 0))
+                   ;; set midpoint of av as initial pose of IK
+                   (send robot :angle-vector (midpoint p av-prev av))
+                   (dolist (limb target-limbs)
+                     ;; don't move arm by IK when interpolation is already ended
+                     (if (>= p 1) (return))
+                     (setq ec-prev (elt end-coords-prev (position limb limbs))
+                           ec-current (elt end-coords-current (position limb limbs)))
+                     (setq ret (and ret
+                                    (send robot limb :inverse-kinematics (midcoords p ec-prev ec-current)))))
+                   (push (send robot :angle-vector) interpolated-avs)
+                   (push 100 interpolated-tms)
+                   ))
+             (progn
+               (push av interpolated-avs)
+               (push 50 interpolated-tms)))
+           (setq end-coords-prev end-coords-current)
+           (setq av-prev av)
+           (incf i)) ;; dolist (av avs)
+         ;; restore states
+         (setq avs (nreverse interpolated-avs) tms (nreverse interpolated-tms))
+         (send robot :move-to c-orig :world)
+         (send robot :angle-vector av-orig)
+         (setq av-prev av-prev-orig)
+         (unless ret
+           (warning-message 1 ":anlge-vector-sequnce fail to generate end-coords-interpolation motion~%")
+           (return-from :angle-vector-sequence nil))
+         ))
      (prog1 ;; angle-vector-sequence returns avs
          avs
        (while avs
@@ -793,7 +858,7 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
    ()
    (list
     (list
-     (cons :controller-action "fullbody_controller/joint_trajectory_action")
+     (cons :controller-action "fullbody_controller/follow_joint_trajectory_action")
      (cons :controller-state "fullbody_controller/state")
      (cons :action-type control_msgs::FollowJointTrajectoryAction)
      (cons :joint-names (mapcar #'(lambda (n) (if (symbolp n) (symbol-name n) n)) (send-all (send robot :joint-list) :name))))))
@@ -870,8 +935,8 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
              (cond
               ((numberp i)
                (push (elt poss i) plst)
-               (if vels (push (elt vels i) vlst))
-               (if effs (push (elt effs i) elst)))
+               (if (and vels (> (length vels) i)) (push (elt vels i) vlst))
+               (if (and effs (> (length effs) i)) (push (elt effs i) elst)))
               (t
                (push (send i :ros-joint-angle) plst)
                (if vels (push 0 vlst))
@@ -1107,6 +1172,7 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
   (:init
    (&rest args &key
           (move-base-action-name "move_base") ((:base-frame-id base-frame-id-name) "/base_footprint")
+          (base-controller-action-name "/base_controller/follow_joint_trajectory")
 	  ((:odom-topic odom-topic-name) "/base_odometry/odom") &allow-other-keys)
    (prog1 (send-super* :init args)
      (setq base-frame-id base-frame-id-name)
@@ -1114,14 +1180,15 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
      (setq move-base-action (instance ros::simple-action-client :init
                                       move-base-action-name move_base_msgs::MoveBaseAction
                                       :groupname groupname))
-     (setq move-base-trajectory-action
-           (instance ros::simple-action-client :init
-                     "/base_controller/follow_joint_trajectory"
-                     control_msgs::FollowJointTrajectoryAction
-                     :groupname groupname))
-     (unless (send move-base-trajectory-action :wait-for-server 3)
-       (ros::ros-warn "move-base-trajectory-action is not found")
-       (setq move-base-trajectory-action nil))
+     (when base-controller-action-name
+       (setq move-base-trajectory-action
+             (instance ros::simple-action-client :init
+                       base-controller-action-name
+                       control_msgs::FollowJointTrajectoryAction
+                       :groupname groupname))
+       (unless (send move-base-trajectory-action :wait-for-server 3)
+         (ros::ros-warn "move-base-trajectory-action is not found")
+         (setq move-base-trajectory-action nil)))
      (ros::subscribe odom-topic-name nav_msgs::Odometry
 		     #'send self :odom-callback :groupname groupname)
      ))
