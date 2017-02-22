@@ -1,0 +1,25 @@
+From 37598ecdea25ab6b7cd1fe87bb28a8f2c8d8d9a8 Mon Sep 17 00:00:00 2001
+From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
+Date: Wed, 22 Feb 2017 18:37:35 +0900
+Subject: [PATCH] roseus_tutorials is not released on kinetic
+
+---
+ package.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/package.xml b/package.xml
+index 5abc70b..28666ab 100644
+--- a/package.xml
++++ b/package.xml
+@@ -20,7 +20,7 @@
+ 
+   <!-- Dependencies needed after this package is compiled. -->
+   <run_depend>pr2eus</run_depend>
+-  <run_depend>roseus_tutorials</run_depend>
++  <!-- <run_depend>roseus_tutorials</run_depend> -->
+   <run_depend>jsk_pcl_ros</run_depend>
+ 
+   <!-- Dependencies needed only for running tests. -->
+-- 
+1.9.1
+
