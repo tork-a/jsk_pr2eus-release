@@ -2,6 +2,39 @@
 Changelog for package pr2eus
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.9 (2017-02-22)
+------------------
+* cleanup CMakeLists.txt, use PR2_CONTROLLERS_MSGS_PACKAGE variable and add geneus for hydro (`#285 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/285>`_ )
+* Support Kinetic (`#284 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/284>`_ )
+  * need to add geneus for hydro? https://s3.amazonaws.com/archive.travis-ci.org/jobs/203074134/log.txt
+  * robot-init-test.l: disable test for jade/kinetic, which did not load pr2-interface.l, beacuse of missing pr2_controller_msgs
+  * CMakeLists.txt: using PR2_CONTROLLERS_MSGS_PACKAGE variable to control find_package does not work on hydro
+  * pr2-interface.l exits without error on kinetic
+  * pr2_controllers_msgs is not released on J/K
+  * pr2eus/CMakeLists.txt: pr2_controllers_msgs is not released on J/K
+* Contributors: Kei Okada
+
+0.3.8 (2017-02-07)
+------------------
+* add end-coords-interpolation (`#237 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/237>`_ )
+  * Fix typos in :angle-vector (if end-coords-interpolation
+  * Force end-coords-interpolation to go to given av
+  * add end-coords-interpolation in :angle-vector with:end-coords-interpolation t:  move robot in cartesian space interpolation
+* add more message on kinematics simulator mode
+* Contributors: Kei Okada, Shun Hasegawa
+
+0.3.7 (2016-11-08)
+------------------
+* [pr2eus/pr2-interface.l] add :force-assoc option for :start-grasp
+* robot-interface.l: send-trajectory-each : check if vels/effs is #f()
+* Contributors: Kei Okada, Yuki Furuta
+
+0.3.6 (2016-11-02)
+------------------
+* add :base-controller-action-name for robot does not have move_base_trajectory_action (`#253 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/253>`_ )
+* [pr2eus/robot-interface.l] update actionlib name of default controller. (`#250 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/250>`_ )
+* Contributors: Kei Okada, Masaki Murooka
+
 0.3.5 (2016-09-16)
 ------------------
 
