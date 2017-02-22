@@ -1,4 +1,4 @@
-From 3c5080d17f159824829b9d967a443ba135123445 Mon Sep 17 00:00:00 2001
+From 1a7f89646c303cb3e1eb41bb54b53a001755a158 Mon Sep 17 00:00:00 2001
 From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
 Date: Wed, 22 Feb 2017 18:36:41 +0900
 Subject: [PATCH] pr2_controllers_msgs is not released on indigo
