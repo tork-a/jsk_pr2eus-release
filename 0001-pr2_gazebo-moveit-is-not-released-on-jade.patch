@@ -1,4 +1,4 @@
-From 4479386c8aee9efe2a51b9d7ea1d2a40b9ed8e11 Mon Sep 17 00:00:00 2001
+From d8a80c9dfde1cb30408ccb36ff476dd51570eff9 Mon Sep 17 00:00:00 2001
 From: Kei Okada <kei.okada@gmail.com>
 Date: Sun, 22 May 2016 23:13:31 +0900
 Subject: [PATCH] pr2_gazebo/moveit is not released on jade
@@ -8,7 +8,7 @@ Subject: [PATCH] pr2_gazebo/moveit is not released on jade
  1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/package.xml b/package.xml
-index 952e00a..0183d28 100644
+index c4227c9..955c10b 100644
 --- a/package.xml
 +++ b/package.xml
 @@ -28,9 +28,9 @@
