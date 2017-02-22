@@ -1,0 +1,29 @@
+From 973ef08367cf94f35df2af643c99046691c244cc Mon Sep 17 00:00:00 2001
+From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
+Date: Wed, 22 Feb 2017 18:37:11 +0900
+Subject: [PATCH] pr2_gazebo is not released on kinetic
+
+---
+ package.xml | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/package.xml b/package.xml
+index debb4ff..973ddcd 100644
+--- a/package.xml
++++ b/package.xml
+@@ -28,9 +28,9 @@
+ 
+   <!-- Dependencies needed only for running tests. -->
+   <test_depend>rostest</test_depend>
+-  <test_depend>pr2_gazebo</test_depend>
+-  <test_depend>pr2_moveit_config</test_depend>
+-  <test_depend>pr2_moveit_plugins</test_depend>
++  <!-- <test_depend>pr2_gazebo</test_depend> -->
++  <!-- <test_depend>pr2_moveit_config</test_depend> -->
++  <!-- <test_depend>pr2_moveit_plugins</test_depend> -->
+   <test_depend>moveit_planners_ompl</test_depend>
+ 
+ </package>
+-- 
+1.9.1
+
