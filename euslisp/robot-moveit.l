@@ -48,6 +48,7 @@
           planning-scene-world-topic
           robot
           default-frame-id default-link
+          default-planner-id
           multi-dof-name multi-dof-frame
           use-action planning-action-client
           ))
@@ -64,6 +65,7 @@
          ((:planning-scene-world pl-sc-world) "/planning_scene_world")
          ((:state-validity-service sv-srv) "/check_state_validity")
          ((:robot rb)) (frame-id) ;; frame-id needs to be contained in robot_model
+         ((:planner-id pl-id) "RRTConnectkConfigDefault")
          (multi-dof-joint-name "virtual_joint")
          (multi-dof-frame-id "odom_combined"))
    (unless rb
@@ -80,6 +82,7 @@
          planning-scene-world-topic pl-sc-world
          robot rb
          default-frame-id frame-id
+         default-planner-id pl-id
          multi-dof-name multi-dof-joint-name
          multi-dof-frame multi-dof-frame-id)
    (ros::advertise planning-scene-world-topic moveit_msgs::PlanningSceneWorld)
@@ -232,7 +235,7 @@
      (send* self :motion-plan-constraints confkey :goal-constraints (list const) args)
      ))
   (:motion-plan-constraints
-   (confkey &key (scene) (planner-id "RRTConnectkConfigDefault")
+   (confkey &key (scene) (planner-id default-planner-id)
             (planning-attempts 1) (planning-time 5.0)
             (workspace-x 1.0) (workspace-y 1.0) (workspace-z 1.6)
             (goal-constraints) (extra-goal-constraints)
@@ -302,19 +305,21 @@
    (confkey &rest args &key (set-angle-vector) (scene) (use-scene t) (planning-time 5.0)
             (planning-attempts 3) (retry) &allow-other-keys)
    (let (ret)
-     (if set-angle-vector (send robot :angle-vector set-angle-vector))
+     (when set-angle-vector (send robot :angle-vector set-angle-vector))
      (unless scene (setq scene (send self :get-planning-scene)))
      (setq ret
            (send* self :motion-plan confkey
                   :planning-time planning-time :planning-attempts planning-attempts
-                  :scene (if use-scene scene) args))
+                  :scene (if use-scene scene)
+                  args))
      (when (and retry (not ret)) ;; retry
        (when get-scene (setq scene (send self :get-planning-scene)))
        (setq ret
              (send* self :motion-plan confkey
                     :planning-time (* 2 planning-time)
                     :planning-attempts (* 2 planning-attempts)
-                    :scene (if use-scene scene) args)))
+                    :scene (if use-scene scene)
+                    args)))
      ret
      ))
   (:planning-make-trajectory-to-coords-no-ik
@@ -441,15 +446,66 @@
                   :get-ik-for-pose cds confkey :end-coords ed-lst args))
      ret))
   (:angle-vector-make-trajectory
-   (av &rest args &key (move-arm :larm) (use-torso) &allow-other-keys)
+   (av &rest args &key (move-arm :larm) (use-torso)
+                       (start-offset-time 0.01) &allow-other-keys)
    (let* ((r (send self :parse-end-coords move-arm use-torso))
           (confkey (car r))
           (ed-lst (cdr r))
-          ret)
-     (setq ret
-           (send* self :planning-environment
-                  :planning-make-trajectory confkey
-                  :set-angle-vector av :end-coords ed-lst args))
+          failed time-from-start
+          scene joint-state points
+          tmp-ret ret)
+     (if (listp av)
+         (progn
+           (dolist (tmp-av av)
+             (setq joint-state
+                   (joint-list->joint_state (send robot :joint-list)))
+             (setq scene (send self :planning-environment
+                               :get-planning-scene))
+             (send scene :robot_state :joint_state joint-state)
+             (setq tmp-ret
+                   (send* self :planning-environment
+                          :planning-make-trajectory confkey
+                          :set-angle-vector tmp-av :scene scene
+                          :end-coords ed-lst args))
+             (if tmp-ret
+               (progn
+                 (setq points (send tmp-ret :trajectory
+                                    :joint_trajectory :points))
+                 (when time-from-start
+                   (setq points
+                         (let (tmp-points)
+                           (dolist (pt points)
+                             (send pt :time_from_start
+                                   (ros::time
+                                     (+ time-from-start
+                                        start-offset-time
+                                        (send (send pt :time_from_start)
+                                              :to-sec))))
+                             (setq tmp-points
+                                   (append tmp-points (list pt))))
+                           tmp-points)))
+                 (setq ret
+                       (if ret
+                         (progn
+                           (send ret :planning_time
+                                 (+ (send ret :planning_time)
+                                    (send tmp-ret :planning_time)))
+                           (send ret :trajectory :joint_trajectory :points
+                                 (append (send ret :trajectory
+                                               :joint_trajectory :points)
+                                         points))
+                           ret) tmp-ret))
+                 (setq time-from-start
+                       (send (send (car (last points)) :time_from_start)
+                             :to-sec)))
+               (setq failed t))
+             (send robot :angle-vector tmp-av))
+           (when failed (setq ret nil)))
+         (progn
+           (setq ret
+                 (send* self :planning-environment
+                        :planning-make-trajectory confkey
+                        :set-angle-vector av :end-coords ed-lst args))))
      ret))
   (:end-coords-make-trajectory
    (cds &rest args &key (move-arm :larm) (use-torso) &allow-other-keys)
@@ -463,22 +519,60 @@
                     cds confkey :end-coords ed-lst args))
      ret))
   (:angle-vector-motion-plan ;;
-   (av &rest args &key (move-arm :larm) (reset-total-time 5000.0) (use-send-angle-vector) &allow-other-keys)
-   (let (traj ret)
+   (av &rest args &key (ctype controller-type) (start-offset-time) (total-time)
+       (move-arm :larm) (reset-total-time 5000.0) (use-send-angle-vector)
+       &allow-other-keys)
+   (let (traj ret filtered orig-total-time)
+     (setq ctype (or ctype controller-type))
+     (unless (gethash ctype controller-table)
+       (warn ";; controller-type: ~A not found" ctype)
+       (return-from :angle-vector-motion-plan))
      (setq ret (send* self :angle-vector-make-trajectory av args))
      (when ret
        (setq traj (send ret :trajectory :joint_trajectory))
-       (when (< (send (send (car (last (send traj :points))) :time_from_start) :to-sec) 0.001)
+       (setq orig-total-time (send (send (car (last (send traj :points))) :time_from_start) :to-sec)) ;; [sec]
+       (when (< orig-total-time 0.001)
          (unless reset-total-time
            (ros::ros-error "Trajectory has very short duration")
            (return-from :angle-vector-motion-plan nil))
          (ros::ros-warn "reset Trajectory Total time")
-         (setq traj (send self :trajectory-filter traj :total-time reset-total-time)))
-       (ros::ros-info ";; generated ~A points for ~A sec" (length (send traj :points)) (send (send (car (last (send traj :points))) :time_from_start) :to-sec))
+         (setq traj (send* self :trajectory-filter traj :start-offset-time start-offset-time :total-time reset-total-time args)))
+       (ros::ros-info ";; Planned Trajectory Total Time ~7,3f [sec]" orig-total-time)
+       (when (and total-time ;; [msec]
+                  (< orig-total-time
+                     (/ total-time 1000)))
+         (setq filtered t)
+         (setq traj (send* self :trajectory-filter traj :start-offset-time start-offset-time :total-time total-time args))
+         (setq orig-total-time (/ total-time 1000))
+         (ros::ros-info ";; Scaled Trajectory Total Time ~7,3f [sec]" (/ total-time 1000)))
+       (when (and start-offset-time (null filtered))
+         (setq traj (send* self :trajectory-filter traj :start-offset-time start-offset-time :total-time (* orig-total-time 1000.0) args)) ;; :total-time [msec]
+         (ros::ros-info ";; Scaled Trajectory Total Time ~7,3f [sec]" orig-total-time))
+
+       (ros::ros-info ";; generated ~A points for ~A sec using [~A] group" (length (send traj :points)) orig-total-time (send ret :group_name))
+       ;;
+       (mapcar
+        #'(lambda (action param)
+            ;; find controller that does not included in move-arm
+            (when (and
+                    (find param (send self ctype) :test #'equal)
+                    (not (intersection (send traj :joint_names) (cdr (assoc :joint-names param)) :test #'string=)))
+              ;; send via :angle-vector
+              (maphash #'(lambda (ac ct)
+                           (if (equal (list action) ct)
+                             (if (listp av)
+                               (send-message self robot-interface :angle-vector-sequence av (* orig-total-time 1000) ac)
+                               (send-message self robot-interface :angle-vector av (* orig-total-time 1000) ac))))
+                       controller-table)
+              ))
+        controller-actions (send self controller-type))
+
        (if use-send-angle-vector
            (send* self :joint-trajectory-to-angle-vector-list move-arm traj args)
-         (send* self :send-trajectory traj args))
-       )))
+           (if start-offset-time
+             (send* self :send-trajectory traj :starttime start-offset-time args)
+             (send* self :send-trajectory traj args)))
+       (if (listp av) av (list av)))))
   (:move-end-coords-plan ;;
    (cds &rest args &key (move-arm :larm) (reset-total-time 5000.0) (use-send-angle-vector) &allow-other-keys)
    (let (traj ret)
@@ -490,27 +584,33 @@
            (ros::ros-error "Trajectory has very short duration")
            (return-from :move-end-coords-plan nil))
          (ros::ros-warn "reset Trajectory Total time")
-         (setq traj (send self :trajectory-filter traj :total-time reset-total-time)))
+         (setq traj (send* self :trajectory-filter traj :total-time reset-total-time args)))
        (if use-send-angle-vector
            (send* self :joint-trajectory-to-angle-vector-list move-arm traj args)
          (send* self :send-trajectory traj args))
        )))
   (:trajectory-filter ;; simple trajectory for zero duration
-   (traj &key (copy) (total-time 5000.0) (minimum-time 0.001))
-   (when (and minimum-time
-              (> (send (send (car (last (send traj :points))) :time_from_start) :to-sec)
+   (traj &key (copy) (total-time 5000.0) (minimum-time 0.001) (start-offset-time) (clear-velocities) &rest args &allow-other-keys)
+   (let ((orig-total-time (send (send (car (last (send traj :points))) :time_from_start) :to-sec)))
+   (when (and minimum-time (not start-offset-time)
+              (> orig-total-time
                  minimum-time))
+     (ros::ros-warn ";; Trajectory Filter will not work, start-offset-time : ~A, minimum-time : ~A, first point in trajectory ~A" start-offset-time minimum-time orig-total-time)
      (return-from :trajectory-filter traj))
    (when copy
      (setq traj (copy-object traj)))
    (let* ((points (send traj :points))
           (size (length points))
           (time-step (/ 1 (float (1- size))))
+          (time-scale (/ (/ total-time 1000.0) orig-total-time))
           (cntr 0))
      (dolist (pt points)
-       (send pt :time_from_start (ros::time (* (/ total-time 1000) cntr time-step)))
+       (when clear-velocities
+         (send pt :velocities #f())
+         (send pt :accelerations #f()))
+       (send pt :time_from_start (ros::time (+ start-offset-time (* time-scale (send (send pt :time_from_start) :to-sec)))))
        (incf cntr))
-     traj))
+     traj)))
   )
 
 (defun make-box-shape (x &optional y z)
