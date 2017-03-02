@@ -1,4 +1,4 @@
-From 08e705a3af245aa89499a3311ae0b5bd5ac85dbf Mon Sep 17 00:00:00 2001
+From 2ff749935069e9c18979c7221c4788d20853685b Mon Sep 17 00:00:00 2001
 From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
 Date: Wed, 22 Feb 2017 18:37:35 +0900
 Subject: [PATCH] roseus_tutorials is not released on kinetic
@@ -21,5 +21,5 @@ index 5abc70b..28666ab 100644
  
    <!-- Dependencies needed only for running tests. -->
 -- 
-1.9.1
+1.9.0
 
