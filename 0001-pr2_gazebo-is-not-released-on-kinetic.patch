@@ -1,4 +1,4 @@
-From b04b5c994811e5419c1dab2f4a85958788fbd03e Mon Sep 17 00:00:00 2001
+From c044e8c1ac43f5b40152a4d7f8968355242eb875 Mon Sep 17 00:00:00 2001
 From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
 Date: Wed, 22 Feb 2017 18:37:11 +0900
 Subject: [PATCH] pr2_gazebo is not released on kinetic
@@ -25,5 +25,5 @@ index debb4ff..973ddcd 100644
  
  </package>
 -- 
-1.9.1
+1.9.0
 
