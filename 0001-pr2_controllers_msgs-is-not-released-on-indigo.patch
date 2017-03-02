@@ -1,4 +1,4 @@
-From 1a7f89646c303cb3e1eb41bb54b53a001755a158 Mon Sep 17 00:00:00 2001
+From 1d3d272a3e05c2b50d0ad6cb5c4c9593232033aa Mon Sep 17 00:00:00 2001
 From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
 Date: Wed, 22 Feb 2017 18:36:41 +0900
 Subject: [PATCH] pr2_controllers_msgs is not released on indigo
@@ -30,5 +30,5 @@ index f099c42..4632a91 100644
    <run_depend>control_msgs</run_depend>
    <run_depend>move_base_msgs</run_depend>
 -- 
-1.9.1
+1.9.0
 
