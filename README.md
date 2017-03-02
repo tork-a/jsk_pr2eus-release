@@ -1,3 +1,30 @@
+## jsk_pr2eus (kinetic) - 0.3.10-0
+
+The packages in the `jsk_pr2eus` repository were released into the `kinetic` distro by running `./send_to_bloom.py jsk-ros-pkg jsk_pr2eus` on `Thu, 02 Mar 2017 02:31:53 -0000`
+
+These packages were released:
+- `jsk_pr2eus`
+- `pr2eus`
+- `pr2eus_moveit`
+- `pr2eus_tutorials`
+
+Version of package(s) in repository `jsk_pr2eus`:
+
+- upstream repository: https://github.com/jsk-ros-pkg/jsk_pr2eus
+- release repository: https://github.com/tork-a/jsk_pr2eus-release.git
+- rosdistro version: `0.3.9-1`
+- old version: `0.3.9-1`
+- new version: `0.3.10-0`
+
+Versions of tools used:
+
+- bloom version: `0.5.24`
+- catkin_pkg version: `0.3.1`
+- rosdep version: `0.11.5`
+- rosdistro version: `0.6.1`
+- vcstools version: `0.1.39`
+
+
 ## jsk_pr2eus (jade) - 0.3.10-0
 
 The packages in the `jsk_pr2eus` repository were released into the `jade` distro by running `./send_to_bloom.py jsk-ros-pkg jsk_pr2eus` on `Thu, 02 Mar 2017 02:23:35 -0000`
