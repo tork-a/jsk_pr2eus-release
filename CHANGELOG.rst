@@ -2,6 +2,9 @@
 Changelog for package pr2eus_moveit
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.10 (2017-03-02)
+-------------------
+
 0.3.9 (2017-02-22)
 ------------------
 * Support Kinetic (`#284 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/284>`_ )
