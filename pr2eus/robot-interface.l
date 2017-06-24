@@ -52,9 +52,12 @@
             ;; e.g. Type: pr2_controllers_msgs/JointTrajectoryActionFeedback does not have :error
             (setq current-time (ros::time- (ros::time-now) (send msg :status :goal_id :stamp)))))
      (setq finish-time (send (car (last (send (send ros::comm-state :action-goal) :goal :trajectory :points))) :time_from_start))
-     (when (string= (send (send ros::comm-state :action-goal) :goal_id :id)
-                    (send msg :status :goal_id :id))
-       (setq time-to-finish (send (ros::time- finish-time current-time) :to-sec)))
+     (if (string= (send (send ros::comm-state :action-goal) :goal_id :id)
+                  (send msg :status :goal_id :id))
+         (setq time-to-finish (send (ros::time- finish-time current-time) :to-sec))
+       (progn
+         (ros::ros-warn "[~A] feedback-cb ~A received wrong goal" ros::name-space msg)
+         (setq time-to-finish 0.0)))
      ))
   ;; method for simulatio-modep
   (:push-angle-vector-simulation (av tm &optional prev-av)
@@ -344,7 +347,7 @@
   (:angle-vector
    (av &optional (tm nil) (ctype controller-type) (start-time 0) &key (scale 1) (min-time 1.0) (end-coords-interpolation nil))
    "Send joind angle to robot, this method retuns immediately, so use :wait-interpolation to block until the motion stops.
-- av : joint angle vector [rad]
+- av : joint angle vector [deg]
 - tm : (time to goal in [msec])
    if designated tm is faster than fastest speed, use fastest speed
    if not specified, it will use 1/scale of the fastest speed .
@@ -352,7 +355,7 @@
 - ctype : controller method name
 - start-time : time to start moving
 - scale : if tm is not specified, it will use 1/scale of the fastest speed
-- min-time : minimum time to for time to goal
+- min-time : minimum time for time to goal
 - end-coords-interpolation : set t if you want to move robot in cartesian space interpolation
 "
    (if end-coords-interpolation
@@ -398,7 +401,19 @@
    av)
   (:angle-vector-sequence
    (avs &optional (tms (list 3000)) (ctype controller-type) (start-time 0.1) &key (scale 1) (min-time 0.0) (end-coords-interpolation nil))
-   "Send joind angle to robot, this method retuns immediately, so use :wait-interpolation to block until the motion stops."
+   "Send sequence of joind angle to robot, this method retuns immediately, so use :wait-interpolation to block until the motion stops.
+- avs: sequence of joint angles(float-vector) [deg],  (list av0 av1 ... avn)
+- tms: sequence of duration(float) from previous angle-vector to next goal [msec],  (list tm0 tm1 ... tmn)
+   if tms is atom, then use (list (make-list (length avs) :initial-element tms))) for tms
+   if designated each tmn is faster than fastest speed, use fastest speed
+   if tmn is nil, then it will use 1/scale of the fastest speed .
+   if :fastest is specefied, use fastest speed calcurated from max speed
+- ctype : controller method name
+- start-time : time to start moving
+- scale : if tms is not specified, it will use 1/scale of the fastest speed
+- min-time : minimum time for time to goal
+- end-coords-interpolation : set t if you want to move robot in cartesian space interpolation
+   "
    (setq ctype (or ctype controller-type))  ;; use default controller-type if ctype is nil
    (unless (gethash ctype controller-table)
      (warn ";; controller-type: ~A not found" ctype)
@@ -560,8 +575,8 @@
 - timeout : max time of for waiting
 - return values is a list of interpolatingp for all controllers, so (null (some #'identity (send *ri* :wait-interpolation))) -> t if all interpolation has stopped"
    (if (send self :simulation-modep)
-       (while (some #'(lambda (a) (send a :interpolatingp)) controller-actions)
-              (send self :robot-interface-simulation-callback))
+       (while (send self :interpolatingp)
+         (send self :robot-interface-simulation-callback))
        (cond ;; real robot
          (ctype
           (let ((cacts (gethash ctype controller-table)))
@@ -571,6 +586,9 @@
   (:interpolatingp (&optional (ctype)) ;; controller-type ;; check someone is moving
 "Check if the last sent motion is executing
 return t if interpolating"
+    (when (send self :simulation-modep)
+      (return-from :interpolatingp
+        (some #'(lambda (a) (send a :interpolatingp)) controller-actions)))
     (send self :spin-once)
     (cond
      (ctype
@@ -665,6 +683,7 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
                            ((derivedp j rotational-joint) (rad2deg jangle))))))
            )))
      av))
+  (:stamp () "Returns the stamp which was read at latest callback" (send self :get-robot-state :stamp))
   ;;
   (:send-ros-controller
    (action joint-names starttime trajpoints)
@@ -737,6 +756,9 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
      (if (assoc key robot-state)
 	 (setf (cdr (assoc key robot-state)) msg)
        (push (cons key msg) robot-state)))
+  (:get-robot-state
+   (key)
+   (cdr (assoc key robot-state)))
   (:ros-state-callback
    (msg)
    (let ((robot-state-names (cdr (assoc :name robot-state))))
@@ -902,15 +924,17 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
   (:warningp (&optional (w :dummy)) "When warning mode, it wait for user's key input before sending angle-vector to the robot" (if (not (eq w :dummy)) (setq warningp w)) warningp)
   (:spin-once () (ros::spin-once groupname))
   (:send-trajectory (joint-trajectory-msg
-                     &key ((:controller-actions ca) controller-actions) ((:controller-type ct) controller-type)
-                     (starttime 1) &allow-other-keys)
+                     &key ((:controller-type ct) controller-type) (starttime 1) &allow-other-keys)
+   (unless (gethash ct controller-table)
+     (warn ";; controller-type: ~A not found" ct)
+     (return-from :send-trajectory))
    (mapcar
     #'(lambda (action param)
         (send self :send-trajectory-each
               action (cdr (assoc :joint-names param)) ;; action server and joint-names
               joint-trajectory-msg
               starttime))
-    ca (send self ct)))
+    (gethash ct controller-table) (send self ct)))
   (:send-trajectory-each
    (action joint-names traj &optional (starttime 0.2))
    (let* ((jnames (send traj :joint_names))
@@ -1258,7 +1282,7 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
    (coords &rest args &key (no-wait nil) &allow-other-keys)
    (send* self :move-to-send coords args)
    (if (not no-wait)
-       (send* self :move-to-wait args)))
+       (send* self :move-to-wait args) t))
   (:move-to-send
    (coords &key (frame-id "world") (wait-for-server-timeout 5) (count 0) &allow-other-keys)
    (setq move-base-goal-msg (instance move_base_msgs::MoveBaseActionGoal :init))
@@ -1395,7 +1419,7 @@ Return value is a list of interpolatingp for all controllers, so (null (some #'i
    ()
    (send self :spin-once) ;; update
    (when (send self :simulation-modep)
-     (return-from :go-waitp nil)) ;; temporary
+     (return-from :go-waitp (not (null current-goal-coords))))
    (cond
     ((or
       (equal (send move-base-action :get-state) ros::*simple-goal-state-active*)
