@@ -1,0 +1,12 @@
+Source: ros-jade-pr2eus-moveit
+Section: misc
+Priority: extra
+Maintainer: YoheiKakiuchi <youhei@jsk.t.u-tokyo.ac.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-jade-catkin, ros-jade-control-msgs, ros-jade-moveit-msgs, ros-jade-moveit-planners-ompl, ros-jade-pr2eus, ros-jade-roseus, ros-jade-rostest
+Homepage: http://ros.org/wiki/pr2eus_moveit
+Standards-Version: 3.9.2
+
+Package: ros-jade-pr2eus-moveit
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-jade-control-msgs, ros-jade-moveit-msgs, ros-jade-pr2eus, ros-jade-roseus
+Description: pr2eus_moveit
