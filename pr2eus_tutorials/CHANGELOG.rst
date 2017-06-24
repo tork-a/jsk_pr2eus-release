@@ -2,6 +2,11 @@
 Changelog for package pr2eus_tutorials
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.11 (2017-06-25)
+-------------------
+* add test code for pr2 dual arm IK (`#272 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/272>`_ )
+* Contributors: Chi Wun Au
+
 0.3.10 (2017-03-02)
 -------------------
 
