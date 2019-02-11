@@ -2,6 +2,122 @@
 Changelog for package pr2eus_moveit
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.14 (2019-02-11)
+-------------------
+* fix typo and add pr2-init in pr2eus-moveit.l for PR2 + moveit (`#382 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/382>`_ )
+
+  * add moveit pr2-init in pr2eus-moveit.l
+    redefine original pr2-init -> pr2-init-org
+  * fix parenthesis close in pr2eus-moveit.l
+
+* Fix velocity time scaling (`#377 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/377>`_ )
+
+  * Fix scaling of multi dof joint trajectory
+  * scale accelerations in :trajectory-filter
+  * fix velocity time scaling
+  * Add test for time scaling of vel and acc in :trajectory-filter
+
+* Fix :angle-vector-make-trajectory to ignore start-offset-time (`#365 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/365>`_ )
+
+  * Remove first point of new traj if it overlaps with existing traj.
+    Without this fix, traj points having the same time_from_start appear.
+    This may harm joint trajectory action server.
+  * Use exact time_from_start to pass test
+  * Fix :angle-vector-make-trajectory to ignore start-offset-time
+  * Reduce start-offset-time to speed up tests
+  * Use init-pose instead of reset-manip-pose to speed up test-angle-vector-sequence-motion-plan
+  * Loosen time limit of new test
+  * Add test for start-offset-time with avs
+
+* Fix time_from_start in motion-planned angle-vector-sequence (`#363 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/363>`_ )
+
+  * Update robot in *ri* in 1st loop
+  * Set time_from_start correctly in :angle-vector-make-trajectory
+    Previously, traj points for second av started from zero time_from_start
+  * Add equal to sort in test to avoid error
+  * Add test for concatenation in :angle-vector-make-trajectory
+
+* Fix :trajectory-filter to ignore start-offset-time (`#361 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/361>`_ )
+
+  * Remove start-offset-time from passing args
+  * Fix :trajectory-filter to ignore start-offset-time
+  * Add test for start-offset-time
+
+* pr2eus_moveit: support motion with mobile base (`#357 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/357>`_ )
+
+  * reset-total-time is used only when trajectory is short
+    See https://github.com/jsk-ros-pkg/jsk_pr2eus/blob/0.3.13/pr2eus_moveit/euslisp/robot-moveit.l#L539-L544
+  * Don't skip :trajectory-filter as before
+    So far, this has been realized by an odd way
+    (https://github.com/jsk-ros-pkg/jsk_pr2eus/commit/ca27e9d8dbe765b1879daf9ccd80e09c81674ab1)
+  * pr2eus_moveit: run test only when pr2_gazebo is available
+  * pr2eus_moveit: support planning with base movement
+
+* run everything within jenkins (`#340 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/340>`_)
+
+  * explictly set DISPLAY="" for roseus test
+  * re-define :joint-angle to avoid print violate max/min-angle that exceeds 4M log limit
+  * test-pr2eus-moveit.l: not sure why, but sometimes utf-8 code is displayed and brakes catkin build
+  * set time-limit for pr2-ri-test to 600
+  * .travis.yml: run everything within travis
+  * install pr2-arm-kinematics for indigo
+
+* Use service call for collision-object-publisher (`#324 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/324>`_)
+
+  * operate attached_collision_object by service call
+  * refactor codes in collision-object-publisher
+
+* Contributors: Affonso Guilherme, Kei Okada, Shingo Kitagawa, Shun Hasegawa, Yuki Furuta
+
+0.3.13 (2017-07-14)
+-------------------
+* [pr2eus_moveit] add 0.5 seconds sleep after collision object pub (`#315 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/315>`_)
+  * add comment why we need unix:sleep
+  * add 0.5 seconds sleep after collision object pub
+
+* add test for https://github.com/jsk-ros-pkg/jsk_pr2eus/pull/310#issuecomment-314694668 (`#312 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/312>`_ )
+  * test/test-pr2eus-moveit.l, add test-moveit-fastest-trajectory, ensure that :angle-vector-motion-plan will not send faster motion then moveit planned motion
+  * display both scaled trajectory time and actual time_to_start time
+  * robot-moveit.l : set default start-offset-time to 0, not to skip :trajectory-filter
+  * robot-moveit.l, fix debug info (/ total-time 1000) -> (/ total-time 1000.0)
+
+* Revert `#310 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/310>`_ "[pr2eus_moveit] fix typo in total-time condition" (`#314 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/314>`_ )
+* Contributors: Kei Okada, Shingo Kitagawa
+
+0.3.12 (2017-07-11)
+-------------------
+* robot-interface.l: send angle-vector only once, some controller-table had multiple definition for one method, we ignore them (`#308 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/308>`_)
+  * test/test-pr2eus-moveit.test only runs on indigo
+  * fix when two controller has same action instance
+  * add dummy controller for `#308 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/308>`_
+  * send angle-vector only once, some controller-table had multiple definition for one method, we ignore them
+
+* [pr2eus_moveit] fix bug in angle-vector-motion-plan (`#309 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/309>`_)
+  * fix bug in angle-vector-motion-plan error occur when (length controller-actions) != (length (send self ctype))
+    this case happens when you init robot-interface with :default-controller, but send av with :rarm-controller.
+
+* [pr2eus_moveit] fix typo in total-time condition (`#310 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/310>`_)
+* [pr2eus_moveit] fix typo in robot-moveit.l (`#306 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/306>`_ )
+  * [(:angle-vector-motion-plan] controller-type -> ctype
+
+* Contributors: Kei Okada, Shingo Kitagawa
+
+0.3.11 (2017-06-25)
+-------------------
+* pr2eus_moveit/euslisp/robot-moveit.l: support tm :fast in :angle-vector-motion-plan (`#297 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/297>`_ )
+  * add :scale for :fast in :angle-vector-motion-plan
+  * add trajectory_constraints commentout
+    trajectory_constraints is not used in motion planning.
+    see https://github.com/ros-planning/moveit_msgs/issues/2
+  * add max_velocity/acceleration_scaling_factor
+  * support tm :fast in :angle-vector-motion-plan
+
+* pr2eus_moveit/euslisp/robot-moveit.l: add angle-vector-sequence-motion-plan test (`#293 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/293>`_ )
+  * set longer time-limit for moveit test
+* pass ctype in angle-vector-motion-plan (`#292 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/292>`_ )
+* advertise CollisionObject with latch=t (`#290 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/290>`_ )
+* Contributors: Kei Okada, Shingo Kitagawa
+
 0.3.10 (2017-03-02)
 -------------------
 
