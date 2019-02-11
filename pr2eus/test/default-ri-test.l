@@ -1,6 +1,6 @@
 (require :unittest "lib/llib/unittest.l")
 (load "package://pr2eus/robot-interface.l")
-(load "package://euslisp/jskeus/irteus/demo/sample-robot-model.l")
+(load "irteus/demo/sample-robot-model.l")
 
 (init-unit-test)
 
@@ -21,6 +21,14 @@
 (deftest test-angle-vector
   (assert (send *robot* :reset-pose))
   (assert (send *ri* :angle-vector (send *robot* :angle-vector) 2000))
+  )
+
+(deftest test-end-coords-interpolation
+  (assert (send *robot* :reset-pose))
+  (assert (send *robot* :larm :move-end-pos #f(50 0 0) :world))
+  (assert (send *robot* :rarm :move-end-pos #f(50 0 0) :world))
+  (assert (send *ri* :angle-vector (send *robot* :angle-vector) 1000 nil 0
+                :end-coords-interpolation t))
   )
 
 (deftest test-wait-interpolation
