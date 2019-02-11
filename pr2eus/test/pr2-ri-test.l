@@ -1,26 +1,92 @@
 (require :unittest "lib/llib/unittest.l")
 (load "package://pr2eus/pr2-interface.l")
 
-(init-unit-test)
+;; avoid print violate max/min-angle that exceeds 4M log limit
+(unless (assoc :joint-angle-org (send rotational-joint :methods))
+        (rplaca (assoc :joint-angle (send rotational-joint :methods)) :joint-angle-org))
+(defmethod rotational-joint
+  (:joint-angle
+   (&optional v &key relative &allow-other-keys)
+   (let ()
+     (when v
+       (when (and joint-min-max-table joint-min-max-target)
+         (setq min-angle (send self :joint-min-max-table-min-angle)
+               max-angle (send self :joint-min-max-table-max-angle)))
+       (if relative (setq v (+ v joint-angle)))
+       (cond ((> v max-angle)
+	      (setq v max-angle)))
+       (cond ((< v min-angle)
+	      (setq v min-angle)))
+       (setq joint-angle v)
+       (send child-link :replace-coords default-coords)
+       (send child-link :rotate (deg2rad joint-angle) axis))
+     joint-angle))
+  )
+
+;; initialize *pr2*
 
 (setq *pr2* (pr2))
 
 (while (or (not (boundp '*ri*)) (send *ri* :simulation-modep))
   (setq *ri* (instance pr2-interface :init)))
 
+(when (send *ri* :simulation-modep)
+  (ros::ros-warn "*ri* is running with simulation mode, something goes wrong ....")
+  (sys::exit 1))
+
+(init-unit-test)
+
 (deftest test-wait-interpolation
+  (ros::ros-info "send reset-pose and wait-interpolation")
   (assert (send *pr2* :reset-pose))
   (assert (send *ri* :angle-vector (send *pr2* :angle-vector) 2000))
-  (assert (send *ri* :wait-interpolation))
+  (assert (every #'null (send *ri* :wait-interpolation))
+          ":wait-interpolation must be list of nil")
+  (assert (null (send *ri* :interpolatingp)))
+
+  (ros::ros-info "send reset-pose, cancel goal and wait-interpolation")
+  (send *pr2* :arms :shoulder-p :joint-angle 0)
+  (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
+  (unix:sleep 2)
+  ;; emulate someone stops controller from outside of *ri**
+  (let* ((ca (car (*ri* . controller-actions)))
+         (jn (cdr (assoc :joint-names (car (send *ri* :default-controller)))))
+         (goal (send ca :make-goal-instance)))
+    (send goal :goal :trajectory :joint_names jn)
+    (ros::publish (format nil "~A/goal" (send ca :name)) goal))
+  (assert (every #'null (send *ri* :wait-interpolation)))
+  (assert (null (send *ri* :interpolatingp)))
+  ;;
+  (ros::ros-info "send reset-pose, cancel goal and wait-interpolation-smooth")
+  (send *pr2* :reset-pose)
+  (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
+  (unix:sleep 2)
+  ;; emulate someone stops controller from outside of *ri**
+  (let* ((ca (car (*ri* . controller-actions)))
+         (jn (cdr (assoc :joint-names (car (send *ri* :default-controller)))))
+         (goal (send ca :make-goal-instance)))
+    (send goal :goal :trajectory :joint_names jn)
+    (send goal :goal :trajectory :points
+          (list (instance trajectory_msgs::JointTrajectoryPoint
+                          :init
+                          :positions (instantiate float-vector (length jn))
+                          :time_from_start (ros::time 0.1))))
+    (ros::publish (format nil "~A/goal" (send ca :name)) goal))
+  (assert (null (send *ri* :wait-interpolation-smooth 500))) ;; see https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/187#issuecomment-303074351
+  (assert (send *ri* :interpolating-smoothp 500)) ;; see https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/187#issuecomment-303074351
   )
 
 (deftest test-start-grasp
   (dotimes (i 3)
-    (send *ri* :move-gripper :arms 100.0 :effort 20 :wait t)
+    (send *ri* :move-gripper :arms 100.0 :effort 5000 :wait t)
     (unix:sleep 1)
-    (assert (< (setq r (send *ri* :start-grasp :rarm)) 10)
+    (assert (< (setq r (send *ri* :start-grasp :rarm :gain 5)) 20)
             (format nil "~A check :start-grasp :rarm -> ~A" i r))
-    (assert (< (setq r (send *ri* :start-grasp :larm)) 10)
+    (assert (< (setq r (send *ri* :start-grasp :rarm :gain 5)) 10)
+            (format nil "~A check :start-grasp :rarm -> ~A" i r))
+    (assert (< (setq r (send *ri* :start-grasp :larm :gain 5)) 20)
+            (format nil "~A check :start-grasp :larm -> ~A" i r))
+    (assert (< (setq r (send *ri* :start-grasp :larm :gain 5)) 10)
             (format nil "~A check :start-grasp :larm -> ~A" i r))
     (unix:sleep 1))
   )
@@ -117,6 +183,66 @@
     (send *ri* :wait-interpolation))
   )
 
+(deftest test-wait-interpolation-timeout
+  (let ((ret))
+    (ros::ros-warn "send angle-vector with 1 sec")
+    (warning-message 3 "send angle-vector with 1 sec~%")
+    (send *pr2* :reset-pose)
+    (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+
+    (setq ret (send *ri* :wait-interpolation))
+    (ros::ros-warn ":wait-interpolation returns ~A (= nil)" ret)
+    (warning-message 3 ":wait-interpolation returns ~A (= nil)~%" ret)
+    (assert (every #'null ret) "interpolation must be finished")
+    (setq ret (send *ri* :interpolatingp))
+    (ros::ros-warn ":interpolatingp returns ~A (= nil)" ret)
+    (warning-message 3 ":interpolatingp returns ~A (= nil)~%" ret)
+    (assert (null ret) "interpolation must be finished")
+
+    (ros::ros-warn "send angle-vector with 5 sec")
+    (warning-message 3 "send angle-vector with 5 sec~%")
+    (send *pr2* :reset-manip-pose)
+    (send *ri* :angle-vector (send *pr2* :angle-vector) 5000)
+    (setq ret (send *ri* :wait-interpolation nil 0.1))
+    (ros::ros-warn ":wait-interpolation nil 0.1, returns ~A (= t)" ret)
+    (warning-message 3 ":wait-interpolation nil 0.1 returns ~A (= t)~%" ret)
+    (assert (some #'identity ret) "robot should be interpolating")
+    (ros::rate 5)
+    (dotimes (i (* 3 5)) ;; check if :interpolatingp does not returns nil for 3.0 sec
+      (setq ret (send *ri* :interpolatingp))
+      (ros::ros-warn ":interpolatingp returns ~A (= t)" ret)
+      (warning-message 3 ":interpolatingp returns ~A (= t)~%" ret)
+      (assert ret "robot should be interpolating")
+      (ros::sleep))
+    ;;
+    (setq ret (send *ri* :wait-interpolation))
+    (ros::ros-warn ":wait-interpolation, returns ~A (= nil)" ret)
+    (warning-message 3 ":wait-interpolation returns ~A (= nil)~%" ret)
+    (assert (every #'null ret) "interpolation must be finished")
+    (setq ret (send *ri* :interpolatingp))
+    (ros::ros-warn ":interpolatingp returns ~A (= nil)" ret)
+    (warning-message 3 ":interpolatingp returns ~A (= nil)~%" ret)
+    (assert (null ret) "interpolation must be finished")
+    ))
+
+(deftest test-end-coords-interpolation
+  (let (tm-0 tm-1 tm-diff)
+    (send *pr2* :reset-manip-pose)
+    (send *ri* :angle-vector (send *pr2* :angle-vector))
+    (send *ri* :wait-interpolation)
+    (send *pr2* :larm :move-end-pos #f(50 0 0) :world)
+    (send *pr2* :rarm :move-end-pos #f(50 0 0) :world)
+    (send *ri* :angle-vector (send *pr2* :angle-vector) 1000 nil 0
+          :min-time 1.0
+          :end-coords-interpolation t
+          :end-coords-interpolation-steps 10)
+    (setq tm-0 (ros::time-now))
+    (send *ri* :wait-interpolation)
+    (setq tm-1 (ros::time-now))
+    (setq tm-diff (send (ros::time- tm-1 tm-0) :to-sec))
+    (ros::ros-info "time for duration ~A" tm-diff)
+    (assert (< tm-diff 2) (format nil "end-coords-interpolation takes too long time ~A" tm-diff))
+    ))
 
 (run-all-tests)
 (exit)
