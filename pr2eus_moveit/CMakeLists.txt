@@ -26,10 +26,11 @@ install(DIRECTORY euslisp tutorials
   )
 
 if(CATKIN_ENABLE_TESTING)
-  find_package(catkin REQUIRED COMPONENTS rostest)
-  if ("$ENV{ROS_DISTRO}" STRGREATER "indigo") # > indigo
-    message(WARNING "Skip pr2eus-moveit.test")
-  else()
+  find_package(rostest REQUIRED)
+  find_package(pr2_gazebo QUIET)
+  if(pr2_gazebo_FOUND)
     add_rostest(test/test-pr2eus-moveit.test)
+  else()
+    message(WARNING "pr2_gazebo is not found. Skipping pr2eus_moveit tests")
   endif()
 endif()
