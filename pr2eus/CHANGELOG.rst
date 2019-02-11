@@ -2,6 +2,184 @@
 Changelog for package pr2eus
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.14 (2019-02-11)
+-------------------
+* [pr2eus] add :get-grasp-result methody and :wait key to :start-grasp method (`#386 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/386>`_ )
+* pr2-interface: Make use of return value of :move-gripper method (`#364 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/364>`_ )
+
+  * pr2-interface: make use of return value for :stop-grasp
+  * pr2-interface: fix bug on :start-grasp return value of :joint-angle
+  * pr2-interface: make use of return values of :move-gripper
+
+* [pr2eus/speak.l] enable `speak-jp` with `wait: t` (`#369 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/369>`_ )
+* add test to reproduce `#366 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/366>`_ (play-sound could not play file format) (`#371 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/371>`_ )
+
+  * fix speak-test-action.py, more test on SAY, PLAY_FILE and buiding files
+  * [pr2eus/speak.l] use (namestring) to get string from pathname, Fixed `#366 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/366>`_
+  * add test-speak-number / test-ri-speak-number
+  * add test to reproduce `#366 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/366>`_ (play-sound could not play file format)
+
+* pr2-interface.l: Add optional key arguments for :angle-vector-with-constraint (`#380 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/380>`_ )
+
+  * add :revert-if-fail, :initial-angle-vector, :div optional key for :angle-vector-with-constraint
+  * fix minor indent
+
+* robot-interface.l: remove old timer-job (`#321 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/321>`_ )
+* fix speak-test.test to fail on volume==0 (`#379 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/379>`_ )
+
+  * [pr2eus/speak.l] Fixed volume insertion checking with :volume accessor exists
+  * [pr2eus/speak.l] add :volume keyward for play-sound for sound_play >= 0.3.1 (Closes `#368 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/368>`_)
+  * fix speak-test.test to fail on volume==0
+    pr2eus/test/speak-test.py: check if SoundRequest has volume attribute
+
+* .travis.yml : remove hydro/jade, add melodic, fix speak-test for indigo (`#385 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/385>`_ )
+
+  * test:speak-test.l add (ros::sleep 2) at the end of script, to wait for last message actually send out
+  * fix test for indigo
+
+* Goal header stamp should be the time message is made  (`#358 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/358>`_ )
+
+  * fix goal header stamp time
+
+* [pr2eus/robot-interface.l] Modified warning message in case of we can not connect to follow joint trajectory server (`#381 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/381>`_ )
+* fix typo in error message on pr2eus/pr2-interface.l ( `#384 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/384>`_ )
+* pr2eus: override clear-costmap namespace for pr2 (`#343 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/343>`_ )
+
+  * pr2eus: override clear-costmap namespace for pr2
+  * pr2eus: delegate costmap functions to robot-move-base-interface
+  * pr2eus: default value of inflation range: 0.3
+
+* add test for pr2/speak.l (`#374 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/374>`_ )
+
+  * add test for action interface
+  * add speak-test.py to check contents of SpeakRequest message
+  * run speak-test.l and catch message by hztest
+
+* Equalize min-time behavior of end-coords-interpolation to usual angle-vector (`#355 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/355>`_ )
+
+  * Equalize min-time behavior of end-coords-interpolation to usual angle-vector
+  * Add test to catch (`#354 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/354>`_)
+  * Add end-coords-interpolation test
+
+
+* pr2eus_moveit: support motion with mobile base (`#357 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/357>`_ )
+* pr2-ri-test.l : add test to check :wait-interpolation, with timeout (`#352 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/352>`_ )
+
+  * fix: pr2-ri-test.l: check return value of :wait-ingterpolation as list
+  * fix: Calling (load-ros-manifest pr2eus) for the package without msg/srv will be deprecated
+  * pr2eus: robot-interface: add :base-controller-joint-names option
+  * clean up :interpolatingp of robot-interface, use :interpolatingp in controller-actions class
+  * fix :interpolationp of controller-action-client when using real robot
+  * pr2-ri-test.l : add test to check return of :wait-interpolation with timeout value
+  * fix :wait-interpolation of pr2-interface, do not wait for moving joints when timeout is not equal to 0
+  * reduce the retry to 1, 5(retry) x 600 sec exceeds 50min limit of Travis
+  * pr2-ri-test.l : add test to check :wait-interpolation, with timeout
+
+* euscollada 0.4.0 requires changes in tests (from = to eps=, but seems the output is both 0.0) (`#360 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/360>`_ )
+
+  * not sure why we do not need this until now, but we need to use eps=
+
+* Fix typo. stll -> still (`#342 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/342>`_)
+* Fix wrong behaviors in :go-pos-unsafe / :move-trajectory / :move-trajectory (`#336 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/336>`_)
+
+  * fix: go-pos-unsafe less than expected if msec < 1000
+  * fix: move-trajectory wrong document / implementation
+
+* Fix many typos (`#337 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/337>`_)
+* run everything within jenkins (`#340 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/340>`_)
+
+  * explictly set DISPLAY="" for roseus test
+  * re-define :joint-angle to avoid print violate max/min-angle that exceeds 4M log limit
+  * test-pr2eus-moveit.l: not sure why, but sometimes utf-8 code is displayed and brakes catkin build
+  * set time-limit for pr2-ri-test to 600
+  * .travis.yml: run everything within travis
+  * install pr2-arm-kinematics for indigo
+
+* increase stall_velocity_threshold to pass grasp test (`#338 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/338>`_)
+
+  * increase stall_velocity_threshold to pass grasp test
+  * add pr2_gazebo and robot_state_publisher to test_depend
+  * skip pr2eus_moveit from test
+  * set DISPLAY='' when gui is false
+  * hydro/indigo run on travis, jade/kinetic run on jenkins
+
+* [pr2eus] do not pass :wait-until-update in :state args (`#333 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/333>`_ )
+
+  * add comment for :state :wait-until-update
+  * add :wait-until-update test
+  * pass args not including :wait-until-update keys
+
+* Fix :end-coords-interpolation problems (`#325 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/325>`_ )
+
+  * Adapt end-coords-interpolation for over-360 deg turns
+  * Add :steps to :end-coords-interpolation
+  * Changes to :end-coords-interpolation
+
+* pr2eus: partially rever speak function (`#332 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/332>`_ )
+
+  * sound_play could not run within travis/jenkins, so use hztest a dummy subscriber
+  * pr2eus: integrate speak function, add :play-sound :speak-en, :speak-jp method to robot-interface
+  * Revert "pr2eus: add text-to-spech method to robot-interface (`#318 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/318>`_)"
+    This reverts commit ecb2a1e29d2d56ae16035064c91617f2b0afa786.
+
+* pr2eus: add text-to-spech method to robot-interface (`#318 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/318>`_)
+
+  * pr2eus: cleanup speak.l
+  * pr2eus: robot-interface.l: add text-to-speech methods to robot-interface
+  * pr2eus: update test for speak
+  * pr2eus: migrate text-to-speech to robot-interface
+
+* fix sub-angle-vector when diff is over 640 (`#323 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/323>`_ )
+
+  * mod 360 to suport rotation over 640
+  * add test to chcek sub-angle-vector over 620
+  * fix :publish-joint-state after updating angle-vecgtor in robot-interface-simulation-callback, also changed to set av as the keypose
+
+* Contributors: Affonso Guilherme, Kei Okada, Shingo Kitagawa, Shun Hasegawa, Yuki Furuta, Hitoshi Kamada, Iori Yanokura
+
+0.3.13 (2017-07-14)
+-------------------
+* [pr2eus] enable controller-type in :cancel-angle-vector (`#313 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/313>`_)
+  * fix typo in robot-interface ( doc string of :cancel-angle-vector method)
+  * cancel angle-vector by controller-type
+* Contributors: Kei Okada, Shingo Kitagawa
+
+0.3.12 (2017-07-11)
+-------------------
+* [robot-interface.l] :angle-vector-duration add document to how we use :max-joint-velocity (`#305 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/305>`_ )
+* Contributors: Kei Okada
+
+0.3.11 (2017-06-25)
+-------------------
+* use make-caemra-from-ros-camera-info-aux inroseus, in order to generate pr2 model corresponding to `jsk-ros-pkg/jsk_roseus/pulls/#526 <https://github.com/jsk-ros-pkg/jsk-ros-pkg/jsk_roseus/pulls/526>`_ (`#301 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/301>`_)
+  * [pr2eus/pr2.l] update make-camera-from-ros-camera-info-aux
+  * add comment to why we redefine make-camera-from-ros-camera-info-aux in robot model
+  * skip position test in test-cameras on hydro
+
+* [robot_interface.l] add tms comment to :angle-vector-sequence c.f. https://github.com/jsk-ros-pkg/jsk_robot/pull/791#pullrequestreview-45324124 (`#299 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/299>`_)
+* [robot_interface.l] add :stamp method for reading latest stamp (`#298 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/298>`_)
+* .travis.yml: re-enable pr2-ri-test (using gazebo) for indigo (`#296 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/296>`_
+  * pr2-ri-test.l: add test to check :wait-for-interpolation, see (`https://github.com/start-jsk/jsk_apc/issues/2106 <https://github.com/start-jsk/jsk_apc/issues/2106>`_)
+  * when unknown goal is received, we assume the original goal is canceled and set time-to-finish to 0.0
+  * test-start-grasp: send move-gripper with more gain
+  * .travis.yml: re-enable pr2-ri-test (using gazebo) for indigo
+
+* [pr2eus][pr2-interface.l] add switch-controller methods  (`#295 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/295>`_
+  * [pr2eus] add pr2_mechanism_msgs to depend
+
+* [pr2eus][pr2eus_moveit] use ctype in :send-trajectory and pass ctype in angle-vector-motion-plan (`#295 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/295>`_)
+  * use only controller-type in send-trajectory
+
+* [pr2eus] fix some funcs that break behaviors written at docs (`#289 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/289>`_)
+  * [pr2eus][default-ri-test.l] fix: load path for passing test on local machine
+  * [pr2eus][pr2-ri-test-simple.l] assert return values of robot-interface methods
+  * [pr2eus][robot-interface.l] implement :go-waitp when simulation-modep is t
+  * [pr2eus][robot-interface.l] :move-to-wait returns t when simulation-modep
+  * [pr2eus][robot-interface.l] implement :interpolatingp when :simulation-modep is t
+
+* use link-list instead of (car link-list) in use-base condition(`#272 <https://github.com/jsk-ros-pkg/jsk_pr2eus/issues/272>`_)
+* Contributors: Yuki Furuta, Kei Okada, Shingo Kitagawa, Yohei Kakiuchi, Chi Wun Au
+
 0.3.10 (2017-03-02)
 -------------------
 * [pr2eus][pr2-interface.l] move move-to / go-pos callback for simulation to robot-interface.l (`#288 <https://github.com/jsk-ros-pkg/jsk_pr2eus/pull/288>`_)
