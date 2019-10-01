@@ -1,3 +1,30 @@
+## jsk_pr2eus (melodic) - 0.3.14-2
+
+The packages in the `jsk_pr2eus` repository were released into the `melodic` distro by running `/usr/bin/bloom-release jsk_pr2eus --rosdistro melodic --track melodic` on `Tue, 01 Oct 2019 15:03:56 -0000`
+
+These packages were released:
+- `jsk_pr2eus`
+- `pr2eus`
+- `pr2eus_moveit`
+- `pr2eus_tutorials`
+
+Version of package(s) in repository `jsk_pr2eus`:
+
+- upstream repository: https://github.com/jsk-ros-pkg/jsk_pr2eus
+- release repository: unknown
+- rosdistro version: `null`
+- old version: `0.3.14-1`
+- new version: `0.3.14-2`
+
+Versions of tools used:
+
+- bloom version: `0.8.0`
+- catkin_pkg version: `0.4.12`
+- rosdep version: `0.15.2`
+- rosdistro version: `0.7.4`
+- vcstools version: `0.1.42`
+
+
 ## jsk_pr2eus (melodic) - 0.3.14-1
 
 The packages in the `jsk_pr2eus` repository were released into the `melodic` distro by running `/usr/bin/bloom-release jsk_pr2eus --rosdistro melodic --track melodic` on `Tue, 01 Oct 2019 14:31:05 -0000`
