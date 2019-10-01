@@ -1,0 +1,12 @@
+Source: ros-melodic-pr2eus-tutorials
+Section: misc
+Priority: extra
+Maintainer: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-melodic-catkin, ros-melodic-jsk-pcl-ros, ros-melodic-pr2eus
+Homepage: http://ros.org/wiki/pr2eus_tutorials
+Standards-Version: 3.9.2
+
+Package: ros-melodic-pr2eus-tutorials
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-melodic-jsk-interactive-marker, ros-melodic-jsk-pcl-ros, ros-melodic-pr2eus, ros-melodic-roseus-tutorials
+Description: pr2eus_tutorials
