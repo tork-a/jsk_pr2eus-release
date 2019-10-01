@@ -1,0 +1,12 @@
+Source: ros-melodic-pr2eus-moveit
+Section: misc
+Priority: extra
+Maintainer: YoheiKakiuchi <youhei@jsk.t.u-tokyo.ac.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-melodic-catkin, ros-melodic-control-msgs, ros-melodic-moveit-msgs, ros-melodic-moveit-planners-ompl, ros-melodic-pr2-gazebo, ros-melodic-pr2eus, ros-melodic-roseus, ros-melodic-rostest
+Homepage: http://ros.org/wiki/pr2eus_moveit
+Standards-Version: 3.9.2
+
+Package: ros-melodic-pr2eus-moveit
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-melodic-control-msgs, ros-melodic-moveit-msgs, ros-melodic-pr2eus, ros-melodic-roseus
+Description: pr2eus_moveit
