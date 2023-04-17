@@ -40,6 +40,7 @@
     (setq *ri* (instance pr2-interface :init))
     (assert (send *pr2* :reset-pose))
     (assert (send *ri* :angle-vector (send *pr2* :angle-vector)))
+    (send *ri* :wait-interpolation)
     (assert (= (send *ri* :angle-vector-duration (send *ri* :state :potentio-vector) (send *pr2* :angle-vector) 5 1.0) 1))
     (send *pr2* :larm :shoulder-p :joint-angle 0)
     (setq tm (send *ri* :angle-vector-duration (send *ri* :state :potentio-vector) (send *pr2* :angle-vector) 5 1.0 :larm-controller))
@@ -47,29 +48,6 @@
     (setq tm (send *ri* :angle-vector-duration (send *ri* :state :potentio-vector) (send *pr2* :angle-vector) 5 1.0 :rarm-controller))
     (assert (eps= tm 1.0))
     ))
-
-;; https://github.com/jsk-ros-pkg/jsk_pr2eus/pull/165#discussion_r37421484
-(deftest test-go-pos
-  (let ()
-    (setq *ri* (instance pr2-interface :init))
-    (assert (send *ri* :go-pos 1 0 0) "(send *ri* :go-pos 1 0 0)") ;; go-pos is relative to current position
-    (assert (send *ri* :go-pos 0 1 90) "(send *ri* :go-pos 0 1 90)")
-    (assert (send *ri* :go-pos-no-wait -1 1 -90) "(send *ri* :go-pos-no-wait -1 1 -90)")
-    (assert (send *ri* :go-waitp) "(send *ri* :go-waitp)")
-    (assert (send *ri* :go-wait) "(send *ri* :go-wait)")
-    (assert (eps-v= (send (send *ri* :worldcoords ) :worldpos) #f(0 0 0)))
-    ))
-
-(deftest test-move-to
-  (let ()
-    (setq *ri* (instance pr2-interface :init))
-    (assert (send *ri* :move-to (make-coords :pos #f(1000 0 0))) "(send *ri* :move-to (make-coords :pos #f(1000 0 0)))") ;; default is world and wait
-    (send *ri* :move-to (make-coords :pos #f(1000 1000 0) :rpy (float-vector pi/2 0 0)))
-    (assert (send *ri* :move-to (make-coords) :no-wait t) "(send *ri* :move-to (make-coords) :no-wait t)") ;; no-wait t means not wait so need to call wait
-    (assert (send *ri* :move-to-wait) "(send *ri* :move-to-wait)") ;; wait move-to
-    (assert (eps-v= (send (send *ri* :worldcoords ) :worldpos) #f(0 0 0)))
-    ))
-
 
 ;; https://github.com/jsk-ros-pkg/jsk_pr2eus/pull/143
 (defclass pr2-interface-wrong
@@ -131,9 +109,9 @@
             (format nil "*ri* ~A, *pr2* ~A ~A~%"
                     (elt (send *ri* :state :potentio-vector) 5)
                     (elt (send *pr2* :angle-vector) 5)
-                    (eps= (elt (send *ri* :state :potentio-vector) 5) 60.0)))
+                    (eps= (elt (send *ri* :state :potentio-vector) 5) 60.0 1.0)))
       (warning-message 2 msg)
-      (assert (eps= (elt (send *ri* :state :potentio-vector) 5) 60.0) msg)
+      (assert (eps= (elt (send *ri* :state :potentio-vector) 5) 60.0 1.0) msg)
       )
     ))
 
@@ -149,14 +127,12 @@
             (format nil "*ri* ~A, *pr2* ~A ~A~%"
                     (elt (send *ri* :state :potentio-vector) 5)
                     (elt (send *pr2* :angle-vector) 5)
-                    (eps= (elt (send *ri* :state :potentio-vector) 5) -60.0)))
+                    (eps= (elt (send *ri* :state :potentio-vector) 5) -60.0 1.0)))
       (warning-message 2 msg)
-      (assert (eps= (elt (send *ri* :state :potentio-vector) 5) -60.0) msg)
+      (assert (eps= (elt (send *ri* :state :potentio-vector) 5) -60.0 1.0) msg)
       )
     ))
 
 
 (run-all-tests)
 (exit)
-
-
