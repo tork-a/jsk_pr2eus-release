@@ -1,3 +1,32 @@
+## jsk_pr2eus (noetic) - 0.3.15-3
+
+The packages in the `jsk_pr2eus` repository were released into the `noetic` distro by running `/usr/bin/bloom-release jsk_pr2eus --rosdistro noetic --track noetic` on `Wed, 01 Nov 2023 09:20:29 -0000`
+
+These packages were released:
+- `jsk_pr2eus`
+- `pr2eus`
+- `pr2eus_moveit`
+
+These packages were explicitly ignored:
+- `pr2eus_tutorials`
+
+Version of package(s) in repository `jsk_pr2eus`:
+
+- upstream repository: https://github.com/jsk-ros-pkg/jsk_pr2eus
+- release repository: https://github.com/tork-a/jsk_pr2eus-release.git
+- rosdistro version: `0.3.15-1`
+- old version: `0.3.15-2`
+- new version: `0.3.15-3`
+
+Versions of tools used:
+
+- bloom version: `0.11.2`
+- catkin_pkg version: `0.5.2`
+- rosdep version: `0.22.1`
+- rosdistro version: `0.9.0`
+- vcstools version: `0.1.42`
+
+
 ## jsk_pr2eus (noetic) - 0.3.15-2
 
 The packages in the `jsk_pr2eus` repository were released into the `noetic` distro by running `/usr/bin/bloom-release jsk_pr2eus --rosdistro noetic --track noetic` on `Wed, 01 Nov 2023 09:08:22 -0000`
