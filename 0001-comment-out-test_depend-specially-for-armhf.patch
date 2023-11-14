@@ -1,0 +1,38 @@
+From a0b042d63301e92770aa5ba05ef5a62286eb9fa1 Mon Sep 17 00:00:00 2001
+From: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
+Date: Tue, 14 Nov 2023 18:48:12 +0900
+Subject: [PATCH] comment out test_depend, specially for armhf
+
+---
+ package.xml | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/package.xml b/package.xml
+index 9a381b31..4cded14f 100644
+--- a/package.xml
++++ b/package.xml
+@@ -36,14 +36,14 @@
+   <run_depend>sound_play</run_depend>
+ 
+   <!-- Dependencies needed only for running tests. -->
+-  <test_depend>fake_localization</test_depend>
+-  <test_depend>map_server</test_depend>
++  <!-- <test_depend>fake_localization</test_depend> -->
++  <!-- <test_depend>map_server</test_depend> -->
+   <test_depend>rostest</test_depend>
+-  <test_depend>pr2_gazebo</test_depend>
+-  <test_depend>pr2_navigation_slam</test_depend>
+-  <test_depend>pr2_navigation_config</test_depend>
+-  <test_depend>robot_state_publisher</test_depend>
+-  <test_depend>dwa_local_planner</test_depend>
++  <!-- <test_depend>pr2_gazebo</test_depend> -->
++  <!-- <test_depend>pr2_navigation_slam</test_depend> -->
++  <!-- <test_depend>pr2_navigation_config</test_depend> -->
++  <!-- <test_depend>robot_state_publisher</test_depend> -->
++  <!-- <test_depend>dwa_local_planner</test_depend> -->
+ 
+   <export>
+     <pr2eus robot-name="pr2" interface-file="${prefix}/pr2-interface.l" />
+-- 
+2.17.1
+
