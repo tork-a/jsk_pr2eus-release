@@ -1,0 +1,12 @@
+Source: ros-noetic-pr2eus-moveit
+Section: misc
+Priority: optional
+Maintainer: YoheiKakiuchi <youhei@jsk.t.u-tokyo.ac.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-noetic-catkin, ros-noetic-control-msgs, ros-noetic-moveit-msgs, ros-noetic-moveit-planners-ompl <!nocheck>, ros-noetic-pr2-gazebo <!nocheck>, ros-noetic-pr2eus, ros-noetic-roseus, ros-noetic-rostest <!nocheck>
+Homepage: http://ros.org/wiki/pr2eus_moveit
+Standards-Version: 3.9.2
+
+Package: ros-noetic-pr2eus-moveit
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-noetic-control-msgs, ros-noetic-moveit-msgs, ros-noetic-pr2eus, ros-noetic-roseus
+Description: pr2eus_moveit
