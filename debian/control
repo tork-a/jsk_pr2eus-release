@@ -1,0 +1,12 @@
+Source: ros-noetic-pr2eus
+Section: misc
+Priority: optional
+Maintainer: Kei Okada <k-okada@jsk.t.u-tokyo.ac.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-noetic-catkin, ros-noetic-control-msgs, ros-noetic-dynamic-reconfigure, ros-noetic-euscollada, ros-noetic-move-base-msgs, ros-noetic-nav-msgs, ros-noetic-pr2-controllers-msgs, ros-noetic-pr2-description, ros-noetic-pr2-mechanism-msgs, ros-noetic-pr2-msgs, ros-noetic-roseus, ros-noetic-rosgraph-msgs, ros-noetic-rostest <!nocheck>, ros-noetic-sound-play
+Homepage: http://ros.org/wiki/pr2eus
+Standards-Version: 3.9.2
+
+Package: ros-noetic-pr2eus
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-noetic-control-msgs, ros-noetic-dynamic-reconfigure, ros-noetic-euscollada, ros-noetic-move-base-msgs, ros-noetic-nav-msgs, ros-noetic-pr2-controllers-msgs, ros-noetic-pr2-description, ros-noetic-pr2-mechanism-msgs, ros-noetic-pr2-msgs, ros-noetic-roseus, ros-noetic-sound-play
+Description: pr2eus
